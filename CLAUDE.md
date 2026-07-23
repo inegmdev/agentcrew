@@ -1,5 +1,11 @@
 # agentcrew — Agent Instructions
 
+## Session start
+
+- Always load `.claude/MEMORY.md` at the start of every new session, before
+  making changes — it holds distilled product/architecture knowledge so you
+  don't re-derive it from scratch.
+
 ## Docs
 
 - Always read the docs (architecture, product description) before making

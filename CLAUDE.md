@@ -17,3 +17,12 @@
 
 - GitHub issues are the most important backlog — check them when looking
   for what to work on next.
+
+## Style
+
+- Prioritize diagrams over long paragraphs, in chats and docs.
+- Favor concision over grammar in chats and docs.
+
+## Commits
+
+- Don't add a Co-Authored-By: Claude trailer to commits.

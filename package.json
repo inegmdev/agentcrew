@@ -1,0 +1,17 @@
+{
+  "name": "agentcrew",
+  "version": "0.1.0",
+  "description": "Setup wizard wiring grill-me/to-prd/to-issues, Vibe Kanban, and guild into one system.",
+  "license": "MIT",
+  "bin": {
+    "agentcrew": "bin/wizard.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "setup": "node bin/wizard.js setup",
+    "update": "node bin/wizard.js update"
+  },
+  "dependencies": {}
+}

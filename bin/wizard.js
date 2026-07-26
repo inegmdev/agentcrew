@@ -1,36 +1,46 @@
 #!/usr/bin/env node
 
+const fs = require('fs');
 const path = require('path');
 const { checkPrerequisites } = require('../src/steps/checkPrerequisites');
 const { detectAgents } = require('../src/steps/detectAgents');
-const { installGuild } = require('../src/steps/installGuild');
-const { installSkills } = require('../src/steps/installSkills');
-const { checkVibeKanban } = require('../src/steps/checkVibeKanban');
+const { installBacklog } = require('../src/steps/installBacklog');
+const { scaffoldMemory } = require('../src/steps/scaffoldMemory');
 const { mergeAgentsMd } = require('../src/steps/mergeAgentsMd');
+const { installSkills } = require('../src/steps/installSkills');
 const state = require('../src/lib/state');
 
 async function setupProject(projectPath) {
   const resolved = path.resolve(projectPath);
+
+  if (!fs.existsSync(resolved)) {
+    throw new Error(`No such directory: ${resolved}`);
+  }
+  if (!fs.existsSync(path.join(resolved, '.git'))) {
+    throw new Error(
+      `Not a git repository: ${resolved}\n` +
+        'The board and memory layer are files that live in the repo, so it needs one.'
+    );
+  }
+
   console.log(`\n=== agentcrew setup: ${resolved} ===`);
 
   checkPrerequisites();
   detectAgents();
-  installGuild(resolved);
-  installSkills(resolved);
+  installBacklog(resolved);
+  scaffoldMemory(resolved);
   mergeAgentsMd(resolved);
-  checkVibeKanban();
+  installSkills(resolved);
 
-  console.log('\n[7/7] Registering project…');
   state.registerProject(resolved);
-  console.log(`  Registered. State file: ${state.STATE_FILE}`);
+  console.log(`\n  Registered in ${state.STATE_FILE}`);
 
   console.log(
-    '\n=== Setup script done. Remaining steps need your judgment: ===\n' +
+    '\n=== Setup done. Two steps left that need a human: ===\n' +
       '  1. Run /setup-matt-pocock-skills inside your agent, in this repo.\n' +
-      '  2. Start Vibe Kanban (npx vibe-kanban), add this project, confirm guild\n' +
-      '     is registered as an MCP server for it.\n' +
-      '  3. Confirm src/adapter/sync-tickets.js\'s tool schema against\n' +
-      '     `npx vibe-kanban --mcp` before using it for real.\n'
+      '  2. Fill in docs/MEMORY.md — what this project is, and why it is built\n' +
+      '     the way it is. Everything else grows from there.\n\n' +
+      '  Then: `backlog board` for the TUI, or `backlog browser` for the web UI.\n'
   );
 }
 
@@ -40,9 +50,24 @@ async function updateAll() {
     console.log('No registered projects yet — run `agentcrew setup <path>` first.');
     return;
   }
+
   console.log(`Updating ${s.projects.length} registered project(s)…`);
+
+  const failures = [];
   for (const project of s.projects) {
-    await setupProject(project.path);
+    try {
+      await setupProject(project.path);
+    } catch (err) {
+      // One unreachable project (deleted, unmounted drive) shouldn't stop the
+      // rest from updating.
+      console.error(`\n  Skipped ${project.path}: ${err.message}`);
+      failures.push(project.path);
+    }
+  }
+
+  if (failures.length) {
+    console.log(`\nFinished with ${failures.length} skipped:`);
+    failures.forEach((f) => console.log(`  - ${f}`));
   }
 }
 

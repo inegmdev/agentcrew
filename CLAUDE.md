@@ -2,9 +2,11 @@
 
 ## Session start
 
-- Always load `.claude/MEMORY.md` at the start of every new session, before
+- Always load `docs/MEMORY.md` at the start of every new session, before
   making changes — it holds distilled product/architecture knowledge so you
   don't re-derive it from scratch.
+- Then read today's and yesterday's `memory/YYYY-MM-DD.md` if they exist.
+  Don't read older logs unless hunting something specific.
 
 ## Docs
 
@@ -21,8 +23,12 @@
 
 ## Backlog
 
-- GitHub issues are the most important backlog — check them when looking
-  for what to work on next.
+- **GitHub issues are intake.** Bugs and requests land there; it's the front
+  door and the first place to look for what matters next.
+- **`backlog` owns execution.** Once something is being worked on, it lives
+  in `backlog/` as a task. Promotion from issue to task is one-way and
+  manual — never sync tasks back to issues.
+- Durable decisions go to `backlog decision create`, not into prose.
 
 ## Style
 

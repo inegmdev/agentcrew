@@ -13,8 +13,12 @@ Agents read **today's and yesterday's** files at session start, and nothing
 older. That window is the whole point: it keeps session cost flat no matter
 how long the project runs.
 
-Consolidation promotes anything durable up into \`docs/MEMORY.md\` and drops
-the rest. Deleting old logs is safe — git keeps them forever.
+Consolidation is **manual today**: periodically read back over recent logs,
+copy anything still true in a month up into \`docs/MEMORY.md\`, and delete the
+rest. Deleting is safe — git keeps every log forever.
+
+(Automating this is planned but not built. Until it is, nothing promotes
+itself.)
 
 | Tier | Where | Loaded |
 |---|---|---|

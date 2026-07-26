@@ -83,9 +83,12 @@ no matter how long the project runs.
 | short-term | `memory/YYYY-MM-DD.md` | today + yesterday only |
 | tasks | `backlog task list` | on demand |
 
-Write to the daily log freely — it's append-only and disposable. Anything
-still true in a month gets promoted into `docs/MEMORY.md`; the rest is
-dropped. Deleting old logs is safe, because git keeps them.
+Write to the daily log freely — it's append-only and disposable. You then
+promote anything still true in a month into `docs/MEMORY.md` and drop the
+rest. Deleting old logs is safe, because git keeps them.
+
+**This promotion step is manual today.** Automating it is the next piece of
+work; until then nothing consolidates itself.
 
 This follows [OpenClaw's memory model](https://docs.openclaw.ai/concepts/memory).
 Cline's Memory Bank is the better-known alternative, but it splits by topic
@@ -94,7 +97,7 @@ grows, rather than staying flat.
 
 ## Tasks vs. GitHub issues
 
-```
+```text
 GitHub Issues  →  intake. Bugs, requests, anything a human files.
       │
       │  one-way, manual, when you decide to work it

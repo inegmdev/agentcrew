@@ -68,6 +68,9 @@ async function updateAll() {
   if (failures.length) {
     console.log(`\nFinished with ${failures.length} skipped:`);
     failures.forEach((f) => console.log(`  - ${f}`));
+    // Exit non-zero so a scheduled `agentcrew update` can tell a partial run
+    // from a clean one. The remaining projects were still updated.
+    process.exitCode = 1;
   }
 }
 

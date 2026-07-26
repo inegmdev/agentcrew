@@ -50,7 +50,15 @@ function mergeBlock(existing, snippet) {
     return existing.slice(0, startIdx) + snippet + existing.slice(endIdx + END.length);
   }
 
-  return existing.trim().length ? `${existing.trim()}\n\n${snippet}\n` : `${snippet}\n`;
+  // A lone or inverted marker — from a hand-edit or an interrupted write —
+  // matches neither the replace nor a clean append. Left in place it would
+  // never match again, so every future run would append another copy. Strip
+  // the stragglers first so this file converges on one block.
+  const cleaned = (startIdx !== -1 || endIdx !== -1)
+    ? existing.split('\n').filter((line) => !line.includes(START) && !line.includes(END)).join('\n')
+    : existing;
+
+  return cleaned.trim().length ? `${cleaned.trim()}\n\n${snippet}\n` : `${snippet}\n`;
 }
 
 module.exports = { mergeAgentsMd, mergeBlock, TARGETS };

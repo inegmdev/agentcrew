@@ -83,12 +83,40 @@ no matter how long the project runs.
 | short-term | `memory/YYYY-MM-DD.md` | today + yesterday only |
 | tasks | `backlog task list` | on demand |
 
-Write to the daily log freely — it's append-only and disposable. You then
-promote anything still true in a month into `docs/MEMORY.md` and drop the
-rest. Deleting old logs is safe, because git keeps them.
+Write to the daily log freely — it's append-only and disposable. Consolidation
+then promotes anything still true in a month into `docs/MEMORY.md` and drops
+the rest. Deleting old logs is safe, because git keeps them.
 
-**This promotion step is manual today.** Automating it is the next piece of
-work; until then nothing consolidates itself.
+## The daemon
+
+```bash
+node bin/wizard.js daemon /path/to/project
+```
+
+Watches the board and reacts to work moving across it, so the memory layer
+maintains itself:
+
+| Task moves to | Daemon does |
+|---|---|
+| any status | appends the transition to `memory/<today>.md` |
+| `Needs Attention` | prints a notification — a human is wanted |
+| `Done` | runs a consolidation pass |
+
+Consolidation is also available on demand:
+
+```bash
+node bin/wizard.js consolidate /path/to/project
+```
+
+**It writes `docs/MEMORY.proposed.md` and never overwrites `MEMORY.md`.**
+That asymmetry is deliberate: appending to a log is safe, but consolidation
+is *lossy by design* — it drops what didn't earn its place. An agent silently
+rewriting your accumulated knowledge is the one failure here that would be
+expensive and hard to notice, so a human accepts it.
+
+The daemon holds no state of its own. Everything it produces is a file in
+your repo, so stopping it loses automation, never data — which is the only
+reason it's allowed to exist.
 
 This follows [OpenClaw's memory model](https://docs.openclaw.ai/concepts/memory).
 Cline's Memory Bank is the better-known alternative, but it splits by topic
@@ -117,6 +145,12 @@ on" will eventually disagree, and then neither can be trusted.
 
 ## Status
 
-The board and memory layer work and are verified against a real install.
-**The daemon does not exist yet** — consolidation and worktree launching are
-still manual. See `docs/MEMORY.md` for what's verified and what isn't.
+The board, memory layer, and daemon all work and are verified against real
+installs. Not yet built: **worktree isolation and agent launching** — moving
+a task to `In Progress` is journalled but does not yet spin up a worktree and
+start an agent in it.
+
+Only Claude Code's headless flag (`-p`) has been verified first-hand; the
+other agents' flags are best-effort defaults and are marked as unverified in
+`src/daemon/agents.js`. See `docs/MEMORY.md` for the full verified/unverified
+split.

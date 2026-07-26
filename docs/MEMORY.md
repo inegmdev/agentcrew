@@ -79,11 +79,34 @@ abandoned, you lose a TUI and keep every task.
   relationships and history stay consistent"). So: **watch the files, write
   through the CLI.**
 
+## The daemon
+
+`agentcrew daemon <path>` watches `backlog/tasks/*.md` and reacts to status
+transitions. It holds **no state of its own** — an in-memory snapshot at
+startup, and every output is a file in the repo. Stopping it loses
+automation, never data.
+
+- `fs.watch` for latency + a 30s full sweep for correctness, because
+  `fs.watch` is unreliable on network mounts and some container filesystems.
+  Changes are debounced 250ms since one save fires it several times.
+- Baseline is read from disk at startup rather than persisted, so a restart
+  never replays old transitions. Transitions occurring while it is stopped
+  are missed by design.
+- **Consolidation writes `docs/MEMORY.proposed.md`, never `MEMORY.md`.**
+  Appending to a daily log is safe; consolidation is lossy on purpose. A
+  human accepts the drop. This asymmetry is load-bearing, not politeness.
+
 ## Not yet done
 
-- **The daemon.** Nothing is autonomous yet — consolidation and worktree
-  launching are still manual. This is the next piece of work and the main
-  gap between the current state and the goal.
+- **Worktree isolation and agent launching.** Moving a task to `In Progress`
+  is journalled but doesn't yet create a worktree and start an agent in it.
+  This is the remaining gap versus the original goal.
+- **Nothing is auto-committed.** The daemon writes files; it doesn't commit
+  or open PRs. The intended end state is auto-commit for journal appends and
+  a PR for MEMORY.md rewrites.
+- **Only `claude -p` is verified.** Gemini, Kimi, Codex and Cursor flags in
+  `src/daemon/agents.js` are best-effort defaults, marked
+  `verified: false`, and overridable per-machine.
 - **Windows and Gemini-CLI verification.** The code is now Windows-capable
   (no shell builtins, `.cmd` shims handled) but has only been run on Linux.
 - `/setup-matt-pocock-skills` and filling in `docs/MEMORY.md` are
@@ -96,5 +119,6 @@ abandoned, you lose a TUI and keep every task.
 | `bin/wizard.js` | CLI entry: `setup <path>`, `update` |
 | `src/lib/` | shell helpers, state registry (`~/.agentcrew/state.json`) |
 | `src/steps/` | one file per setup step, run in order by the wizard |
+| `src/daemon/` | board watcher, journal, consolidation, agent invocation |
 | `templates/AGENTS.snippet.md` | the memory/task boundary injected into every onboarded repo |
 | `templates/MEMORY.template.md` | starting `docs/MEMORY.md` for onboarded repos |

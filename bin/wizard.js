@@ -8,6 +8,8 @@ const { installBacklog } = require('../src/steps/installBacklog');
 const { scaffoldMemory } = require('../src/steps/scaffoldMemory');
 const { mergeAgentsMd } = require('../src/steps/mergeAgentsMd');
 const { installSkills } = require('../src/steps/installSkills');
+const { startDaemon } = require('../src/daemon');
+const { consolidate } = require('../src/daemon/consolidate');
 const state = require('../src/lib/state');
 
 async function setupProject(projectPath) {
@@ -74,6 +76,39 @@ async function updateAll() {
   }
 }
 
+function runDaemon(projectPath) {
+  const resolved = path.resolve(projectPath || '.');
+  console.log(`\n=== agentcrew daemon: ${resolved} ===`);
+
+  const daemon = startDaemon(resolved, { consolidateOnDone: true });
+
+  console.log('  Ctrl-C to stop. Nothing here is load-bearing — stopping the');
+  console.log('  daemon loses automation, never data.\n');
+
+  const shutdown = () => {
+    daemon.stop();
+    console.log('\n  Stopped.');
+    process.exit(0);
+  };
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
+}
+
+function runConsolidate(projectPath) {
+  const resolved = path.resolve(projectPath || '.');
+  console.log(`\n=== agentcrew consolidate: ${resolved} ===`);
+
+  const result = consolidate(resolved);
+  if (!result.ok) {
+    throw new Error(result.reason);
+  }
+
+  console.log(`  Considered ${result.daysConsidered} day(s) of logs via ${result.agent}.`);
+  console.log(`  Proposal: ${result.proposalPath}`);
+  console.log('\n  Nothing was overwritten. Diff it against docs/MEMORY.md and');
+  console.log('  replace that file only if you agree with what was dropped.\n');
+}
+
 async function main() {
   const [command, arg] = process.argv.slice(2);
 
@@ -85,11 +120,17 @@ async function main() {
     await setupProject(arg);
   } else if (command === 'update') {
     await updateAll();
+  } else if (command === 'daemon') {
+    runDaemon(arg);
+  } else if (command === 'consolidate') {
+    runConsolidate(arg);
   } else {
     console.log(
       'Usage:\n' +
         '  agentcrew setup <path-to-project>   Onboard a new project\n' +
-        '  agentcrew update                    Re-run setup for every registered project\n'
+        '  agentcrew update                    Re-run setup for every registered project\n' +
+        '  agentcrew daemon [path]             Watch the board; journal and consolidate\n' +
+        '  agentcrew consolidate [path]        Propose a distilled MEMORY.md now\n'
     );
   }
 }

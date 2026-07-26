@@ -13,12 +13,13 @@ Agents read **today's and yesterday's** files at session start, and nothing
 older. That window is the whole point: it keeps session cost flat no matter
 how long the project runs.
 
-Consolidation is **manual today**: periodically read back over recent logs,
-copy anything still true in a month up into \`docs/MEMORY.md\`, and delete the
-rest. Deleting is safe — git keeps every log forever.
+Consolidation reads recent logs, folds anything still true in a month into
+\`docs/MEMORY.md\`, and drops the rest. Run it with \`agentcrew consolidate\`,
+or leave \`agentcrew daemon\` running and it fires when a task reaches Done.
 
-(Automating this is planned but not built. Until it is, nothing promotes
-itself.)
+It writes \`docs/MEMORY.proposed.md\` and **never overwrites \`MEMORY.md\`
+itself** — consolidation is lossy on purpose, so a human accepts the drop.
+Deleting old logs is safe either way: git keeps them forever.
 
 | Tier | Where | Loaded |
 |---|---|---|

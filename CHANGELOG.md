@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.3.0
+
+Added the daemon, so the memory layer maintains itself.
+
+**Added**
+- `agentcrew daemon [path]` watches `backlog/tasks/*.md` and reacts to status
+  transitions: journals every move to `memory/<today>.md`, notifies on
+  `Needs Attention`, and consolidates on `Done`.
+- `agentcrew consolidate [path]` runs a consolidation pass on demand.
+- `src/daemon/agents.js` maps each agent CLI to its non-interactive
+  invocation. Only Claude Code's `-p` is verified first-hand; the rest are
+  marked `verified: false` and can be overridden per machine.
+
+**Design notes**
+- Consolidation writes `docs/MEMORY.proposed.md` and never overwrites
+  `docs/MEMORY.md`. Appending to a log is safe; consolidation is lossy by
+  design, so a human accepts the drop.
+- The daemon holds no state of its own. Its baseline is read from disk at
+  startup rather than persisted, so restarts never replay old transitions —
+  and transitions that happen while it is stopped are missed, deliberately.
+- `fs.watch` gives latency, a 30s sweep gives correctness. `fs.watch` is
+  unreliable on network mounts and some container filesystems, so the two
+  run together.
+
+**Not built yet**
+- Worktree isolation and agent launching on `In Progress`.
+- Auto-commit of journal appends, and PRs for consolidation proposals.
+
 ## 0.2.0
 
 Replaced the execution and memory layers. Vibe Kanban required a login for

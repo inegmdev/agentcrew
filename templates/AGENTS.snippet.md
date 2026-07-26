@@ -18,6 +18,9 @@
   `docs/MEMORY.md`, which is distilled, not a log. Keep it under ~200 lines.
   A decision with real reasoning behind it goes to
   `backlog decision create "..."` instead, and `docs/MEMORY.md` links to it.
+- **Consolidation:** `agentcrew consolidate` distils recent logs into a
+  proposed `docs/MEMORY.proposed.md`. It never overwrites `docs/MEMORY.md` —
+  a human accepts the result, because consolidation drops things on purpose.
 
 ### Tasks
 

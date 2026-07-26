@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.4.0
+
+One-line install. The capability was already there — `bin/` and a shebang
+have been in place since 0.1.0 — but the README told you to clone the repo
+and invoke `node bin/wizard.js`, so nobody would have found it.
+
+**Added**
+- Documented the actual one-liner:
+  `npx github:inegmdev/agentcrew setup .` — no clone, no npm account,
+  nothing published. Verified end-to-end against the public repo.
+- `repository`, `homepage`, `bugs` and `keywords` in package.json.
+- A `files` allowlist, so packaging is explicit rather than "whatever
+  isn't gitignored". Templates are read at runtime, so they are included
+  deliberately and that is now verified.
+
+**Changed**
+- README uses the installed `agentcrew` command everywhere instead of
+  `node bin/wizard.js`.
+- `.gitignore` covers `*.tgz` so packing in-tree can't be committed.
+
 ## 0.3.0
 
 Added the daemon, so the memory layer maintains itself.

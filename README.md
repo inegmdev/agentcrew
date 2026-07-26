@@ -43,17 +43,26 @@ No database. No server. No account.
 
 ## Quickstart
 
-```bash
-git clone <your-fork-url> agentcrew
-cd agentcrew
-node bin/wizard.js setup /path/to/your/project
-```
-
-Run it against as many projects as you like. Then:
+From inside the project you want to onboard:
 
 ```bash
-node bin/wizard.js update    # re-applies everything to every registered project
+npx github:inegmdev/agentcrew setup .
 ```
+
+That's it. No clone, no npm account, nothing to publish — npx fetches
+straight from the public repo and runs it.
+
+If you'll use it often, install it once and drop the `npx`:
+
+```bash
+npm install -g github:inegmdev/agentcrew
+
+agentcrew setup .        # onboard the project you're standing in
+agentcrew update         # re-apply to every project you've onboarded
+agentcrew daemon .       # watch the board, keep memory current
+```
+
+Onboard as many projects as you like — `update` walks all of them.
 
 ## What `setup` does
 
@@ -90,7 +99,7 @@ the rest. Deleting old logs is safe, because git keeps them.
 ## The daemon
 
 ```bash
-node bin/wizard.js daemon /path/to/project
+agentcrew daemon /path/to/project
 ```
 
 Watches the board and reacts to work moving across it, so the memory layer
@@ -105,7 +114,7 @@ maintains itself:
 Consolidation is also available on demand:
 
 ```bash
-node bin/wizard.js consolidate /path/to/project
+agentcrew consolidate /path/to/project
 ```
 
 **It writes `docs/MEMORY.proposed.md` and never overwrites `MEMORY.md`.**

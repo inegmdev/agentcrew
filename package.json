@@ -1,14 +1,38 @@
 {
   "name": "agentcrew",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Setup wizard wiring Backlog.md, a markdown memory layer, and grill-me/to-prd/to-issues into one system.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/inegmdev/agentcrew.git"
+  },
+  "homepage": "https://github.com/inegmdev/agentcrew#readme",
+  "bugs": {
+    "url": "https://github.com/inegmdev/agentcrew/issues"
+  },
+  "keywords": [
+    "agents",
+    "backlog",
+    "kanban",
+    "memory",
+    "claude-code",
+    "gemini-cli"
+  ],
   "bin": {
     "agentcrew": "bin/wizard.js"
   },
   "engines": {
     "node": ">=18"
   },
+  "files": [
+    "bin/",
+    "src/",
+    "templates/",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
   "scripts": {
     "setup": "node bin/wizard.js setup",
     "update": "node bin/wizard.js update",

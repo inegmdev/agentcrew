@@ -1,22 +1,36 @@
 <!-- agentcrew:start -->
-## Agent memory & task ownership (managed by agentcrew — do not hand-edit; re-run `agentcrew update` instead)
+## Memory & task boundary (managed by agentcrew — do not hand-edit; re-run `agentcrew update` instead)
 
-This project uses guild for memory and Vibe Kanban for task tracking. They are
-not interchangeable — follow this boundary exactly:
+### Memory
 
-- **Vibe Kanban owns tasks.** It is the only source of truth for what's being
-  worked on. Never call guild's `quest_accept` or `quest_fulfill` — that would
-  create a second, competing task board.
-- **guild owns memory only.** At the start of every session, call
-  `guild_session_start` for this project to load the Oath (standing
-  principles) and the last Brief (handoff note). Before doing meaningful
-  research or making a decision, call `lore_appraise` to check whether this
-  has already been figured out. Before ending a session, `lore_inscribe` any
-  durable decision, observation, or gotcha another agent working a different
-  ticket would benefit from — and `quest_brief` a short handoff note for
-  whoever picks up next.
-- **Tickets originate from `.scratch/<feature>/`.** `/to-issues` writes
-  vertical-slice tickets there. `src/adapter/sync-tickets.js` (from the
-  agentcrew repo) turns those into Vibe Kanban cards — it does not run
-  automatically; a human or a hook triggers it.
+| Tier | Where | When to read it |
+|---|---|---|
+| long-term | `docs/MEMORY.md` | every session, first thing |
+| decisions | `backlog decision list` | before revisiting a settled question |
+| short-term | `memory/YYYY-MM-DD.md` | today's and yesterday's only |
+
+- **Start of session:** read `docs/MEMORY.md`, then today's and yesterday's
+  `memory/` logs if they exist. Do not read older logs unless you're looking
+  for something specific — the window exists to keep sessions cheap.
+- **During work:** append to `memory/<today>.md` freely. It is append-only
+  and disposable; nothing there is precious.
+- **Durable findings:** anything still true in a month belongs in
+  `docs/MEMORY.md`, which is distilled, not a log. Keep it under ~200 lines.
+  A decision with real reasoning behind it goes to
+  `backlog decision create "..."` instead, and `docs/MEMORY.md` links to it.
+- **Consolidation:** `agentcrew consolidate` distils recent logs into a
+  proposed `docs/MEMORY.proposed.md`. It never overwrites `docs/MEMORY.md` —
+  a human accepts the result, because consolidation drops things on purpose.
+
+### Tasks
+
+- **`backlog` owns execution.** It is the source of truth for what is being
+  worked on. Use the `backlog` CLI — never edit files under `backlog/` by
+  hand, or its metadata and history drift out of sync.
+- **GitHub issues are intake, not execution.** Bugs and requests land there;
+  a human promotes one into a backlog task when it's time to work it.
+  Promotion is one-way and manual. Never sync backlog tasks back to issues.
+- **`Needs Attention`** is the status that means a human is required —
+  whether the work finished or got stuck. Move a task there instead of
+  stopping silently.
 <!-- agentcrew:end -->

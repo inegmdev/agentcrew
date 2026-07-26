@@ -1,7 +1,7 @@
 {
   "name": "agentcrew",
-  "version": "0.1.0",
-  "description": "Setup wizard wiring grill-me/to-prd/to-issues, Vibe Kanban, and guild into one system.",
+  "version": "0.3.0",
+  "description": "Setup wizard wiring Backlog.md, a markdown memory layer, and grill-me/to-prd/to-issues into one system.",
   "license": "MIT",
   "bin": {
     "agentcrew": "bin/wizard.js"
@@ -11,7 +11,9 @@
   },
   "scripts": {
     "setup": "node bin/wizard.js setup",
-    "update": "node bin/wizard.js update"
+    "update": "node bin/wizard.js update",
+    "daemon": "node bin/wizard.js daemon",
+    "consolidate": "node bin/wizard.js consolidate"
   },
   "dependencies": {}
 }

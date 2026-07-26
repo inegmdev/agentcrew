@@ -1,19 +1,26 @@
 const { which } = require('../lib/shell');
 
+// Kept in step with the engines.node field in package.json.
+const MIN_NODE_MAJOR = 18;
+
 function checkPrerequisites() {
-  console.log('\n[1/7] Checking prerequisites…');
+  console.log('\n[1/6] Checking prerequisites…');
 
   const problems = [];
 
-  if (process.platform === 'win32') {
-    problems.push(
-      "guild's installer targets macOS/Linux. On Windows, use WSL and run this wizard from inside it."
-    );
-  }
-
-  const required = ['git', 'curl', 'node', 'npm'];
+  // No platform gate: everything this wizard installs is npm-based and
+  // cross-platform. (The old macOS/Linux restriction came from guild's
+  // installer, which is no longer part of the stack.)
+  const required = ['git', 'node', 'npm'];
   for (const bin of required) {
     if (!which(bin)) problems.push(`Missing required command: ${bin}`);
+  }
+
+  const major = Number(process.versions.node.split('.')[0]);
+  if (major < MIN_NODE_MAJOR) {
+    problems.push(
+      `Node.js ${MIN_NODE_MAJOR}+ required, running ${process.versions.node}.`
+    );
   }
 
   if (problems.length) {
@@ -22,7 +29,7 @@ function checkPrerequisites() {
     throw new Error('Resolve the above before continuing.');
   }
 
-  console.log('  OK — git, curl, node, npm all present.');
+  console.log(`  OK — git, node ${process.versions.node}, npm all present.`);
 }
 
-module.exports = { checkPrerequisites };
+module.exports = { checkPrerequisites, MIN_NODE_MAJOR };

@@ -1,6 +1,6 @@
 {
   "name": "agentcrew",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Setup wizard wiring Backlog.md, a markdown memory layer, and grill-me/to-prd/to-issues into one system.",
   "license": "MIT",
   "repository": {

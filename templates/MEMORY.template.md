@@ -5,7 +5,8 @@ if it grows past ~200 lines, distil it or move the detail into a decision
 (`backlog decision create "..."`).
 
 This file is **distilled, not a log**. Running notes belong in
-`memory/YYYY-MM-DD.md`; only what's still true in a month belongs here.
+`docs/memory/MEMORY_SHORTTERM.md`; only what's still true in a month belongs
+here.
 
 ## What this project is
 

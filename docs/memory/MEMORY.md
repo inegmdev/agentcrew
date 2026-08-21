@@ -15,7 +15,7 @@ every repo registered in `~/.agentcrew/state.json`.
 flowchart LR
     A["Planning<br/>mattpocock/skills<br/>grill-me → to-prd → to-issues"] -->|".scratch/ tickets"| B["Human promotes<br/>what's worth doing"]
     B --> C["Board<br/>Backlog.md<br/>backlog/tasks/*.md"]
-    D["Memory<br/>docs/MEMORY.md<br/>memory/YYYY-MM-DD.md"] -.->|"read at start<br/>written at end"| C
+    D["Memory<br/>docs/memory/MEMORY.md<br/>MEMORY_SHORTTERM.md<br/>archived/"] -.->|"read at start<br/>written at end"| C
     E["GitHub Issues<br/>intake only"] -->|"one-way, manual"| C
 ```
 
@@ -39,12 +39,17 @@ abandoned, you lose a TUI and keep every task.
 1. **Backlog.md owns execution; GitHub issues are intake only.** Promotion is
    one-way and manual, and nothing syncs back. Two systems that both claim to
    know "what's being worked on" will eventually disagree.
-2. **Memory is markdown, not a service.** Split by *retention*, not by topic:
-   `docs/MEMORY.md` (long-term, always loaded, capped) and
-   `memory/YYYY-MM-DD.md` (short-term, append-only, only today+yesterday
-   read). Modelled on OpenClaw's memory design. Cline's Memory Bank splits by
-   topic and reads everything every session — deliberately not copied, because
-   it gets more expensive as a project grows.
+2. **Memory is markdown, not a service.** Split by *retention*, not by topic,
+   and all of it under `docs/memory/`:
+   `MEMORY.md` (long-term, always loaded, capped),
+   `MEMORY_SHORTTERM.md` (short-term, append-only, one `## YYYY-MM-DD` section
+   per day, only the recent ones read), `archived/session_*.md` (retired log
+   batches, read on demand). Modelled on OpenClaw's memory design. Cline's
+   Memory Bank splits by topic and reads everything every session —
+   deliberately not copied, because it gets more expensive as a project grows.
+   Since 0.5.0 the short-term tier is one file rather than one file per day:
+   an agent skims recent sections in a single read, and cleanup is a defined
+   workflow instead of a judgement call about which files to delete.
 3. **ADRs are Backlog.md's `decision` command**, not a hand-rolled
    `docs/decisions/`. It ships one, indexed by `backlog search` alongside
    tasks and docs.
@@ -57,6 +62,12 @@ abandoned, you lose a TUI and keep every task.
    wizard around Vibe Kanban and guild without ever running either. Backlog.md
    was spiked against a real install *before* any code was written against it
    — which immediately caught that `--json` doesn't exist (it's `--plain`).
+6. **Short-term memory is archived, never deleted.** Old day sections move to
+   `docs/memory/archived/session_YYYY_MM_DD.md` and are linked from the
+   short-term file's archive index. Git would keep deleted logs, but nothing
+   would ever look there; a linked archive stays reachable. Enforcement is the
+   markdown policy in `templates/AGENTS.snippet.md` — no CLI command, per
+   decision 4 (agent-agnostic, no install rights needed).
 
 ## Verified facts (spiked against backlog.md v1.48.0)
 
@@ -92,7 +103,7 @@ automation, never data.
 - Baseline is read from disk at startup rather than persisted, so a restart
   never replays old transitions. Transitions occurring while it is stopped
   are missed by design.
-- **Consolidation writes `docs/MEMORY.proposed.md`, never `MEMORY.md`.**
+- **Consolidation writes `docs/memory/MEMORY.proposed.md`, never `MEMORY.md`.**
   Appending to a daily log is safe; consolidation is lossy on purpose. A
   human accepts the drop. This asymmetry is load-bearing, not politeness.
 
@@ -112,6 +123,21 @@ automation, never data.
 - `/setup-matt-pocock-skills` and filling in `docs/MEMORY.md` are
   deliberately manual — both need judgment a script doesn't have.
 
+## Memory layout (since 0.5.0)
+
+```text
+docs/memory/
+  MEMORY.md              long-term, distilled, always loaded, ~200 lines
+  MEMORY_SHORTTERM.md    archive index + active `## YYYY-MM-DD` sections
+  MEMORY.proposed.md     consolidation output; a human accepts it
+  archived/
+    session_YYYY_MM_DD.md   retired sections, whole and untouched
+```
+
+`agentcrew setup` migrates the pre-0.5 layout on re-run: `docs/MEMORY.md` moves
+to `docs/memory/MEMORY.md`, and each `memory/YYYY-MM-DD.md` becomes an archived
+session linked from the index. Nothing is deleted, and re-running is a no-op.
+
 ## Repo map
 
 | Path | Role |
@@ -120,5 +146,8 @@ automation, never data.
 | `src/lib/` | shell helpers, state registry (`~/.agentcrew/state.json`) |
 | `src/steps/` | one file per setup step, run in order by the wizard |
 | `src/daemon/` | board watcher, journal, consolidation, agent invocation |
+| `src/lib/memory.js` | memory-layer paths, day-section parsing, archive index |
 | `templates/AGENTS.snippet.md` | the memory/task boundary injected into every onboarded repo |
-| `templates/MEMORY.template.md` | starting `docs/MEMORY.md` for onboarded repos |
+| `templates/MEMORY.template.md` | starting `docs/memory/MEMORY.md` for onboarded repos |
+| `templates/MEMORY_SHORTTERM.template.md` | starting short-term log, with the archiving policy |
+| `templates/ARCHIVED.readme.md` | README dropped into `docs/memory/archived/` |

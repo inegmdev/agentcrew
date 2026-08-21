@@ -77,8 +77,8 @@ function handleTransition(projectPath, transition, options) {
   const { log } = options;
   const to = (transition.to || '').toLowerCase();
 
-  // Every transition is journalled: the daily log is append-only and cheap, so
-  // there is no reason to be selective about what goes in it.
+  // Every transition is journalled: the short-term log is append-only and
+  // cheap, so there is no reason to be selective about what goes in it.
   appendToJournal(projectPath, describeTransition(transition), options.now);
   log(`  ${describeTransition(transition)}`);
 
@@ -112,7 +112,7 @@ function runConsolidation(projectPath, options) {
     const result = consolidate(projectPath, options);
     if (result.ok) {
       log(`  Proposal written to ${result.proposalPath} (${result.agent}, ${result.daysConsidered} day(s))`);
-      log('  Review it, then replace docs/MEMORY.md if you agree.');
+      log('  Review it, then replace docs/memory/MEMORY.md if you agree.');
     } else {
       log(`  Skipped consolidation: ${result.reason}`);
     }

@@ -2,11 +2,19 @@
 
 ## Session start
 
-- Always load `docs/MEMORY.md` at the start of every new session, before
-  making changes — it holds distilled product/architecture knowledge so you
-  don't re-derive it from scratch.
-- Then read today's and yesterday's `memory/YYYY-MM-DD.md` if they exist.
-  Don't read older logs unless hunting something specific.
+- Always load `docs/memory/MEMORY.md` at the start of every new session,
+  before making changes — it holds distilled product/architecture knowledge so
+  you don't re-derive it from scratch.
+- Then review the recent day sections in `docs/memory/MEMORY_SHORTTERM.md`.
+  Don't read `docs/memory/archived/` unless hunting something specific.
+- Append today's notes under a `## YYYY-MM-DD` section in
+  `docs/memory/MEMORY_SHORTTERM.md`.
+
+## Memory cleanup
+
+- Short-term memory is **archived, never deleted**: move old day sections into
+  `docs/memory/archived/session_YYYY_MM_DD.md`, clear them from **Active
+  logs**, and link the file under **Archive index**.
 
 ## Docs
 

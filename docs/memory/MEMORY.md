@@ -62,7 +62,13 @@ abandoned, you lose a TUI and keep every task.
    wizard around Vibe Kanban and guild without ever running either. Backlog.md
    was spiked against a real install *before* any code was written against it
    — which immediately caught that `--json` doesn't exist (it's `--plain`).
-6. **Short-term memory is archived, never deleted.** Old day sections move to
+6. **AGENTS.md is the only rules file.** `CLAUDE.md` and `GEMINI.md` are
+   one-line `@AGENTS.md` redirects, not copies — three files with the same
+   rules drift, and the drift is invisible until an agent behaves differently
+   depending on which one it read. Both CLIs expand `@file`, so the redirect
+   is an import, not a suggestion. `mergeAgentsMd` folds hand-written rules
+   out of the redirected files into `AGENTS.md` before overwriting them.
+7. **Short-term memory is archived, never deleted.** Old day sections move to
    `docs/memory/archived/session_YYYY_MM_DD.md` and are linked from the
    short-term file's archive index. Git would keep deleted logs, but nothing
    would ever look there; a linked archive stays reachable. Enforcement is the
@@ -75,6 +81,8 @@ abandoned, you lose a TUI and keep every task.
 - `backlog init` is fully non-interactive with
   `--agent-instructions claude,agents,gemini --integration-mode cli`.
   It writes `CLAUDE.md`, `AGENTS.md`, `GEMINI.md` — all three agents covered.
+  agentcrew then collapses that to one: `AGENTS.md` keeps the rules, and the
+  other two become one-line `@AGENTS.md` redirects.
 - It manages its own marker block (`<!-- BACKLOG.MD GUIDELINES START -->`)
   with a version stamp, so it upgrades in place. We keep a separate
   `<!-- agentcrew:start -->` block; both coexist.
@@ -147,6 +155,7 @@ session linked from the index. Nothing is deleted, and re-running is a no-op.
 | `src/steps/` | one file per setup step, run in order by the wizard |
 | `src/daemon/` | board watcher, journal, consolidation, agent invocation |
 | `src/lib/memory.js` | memory-layer paths, day-section parsing, archive index |
+| `src/steps/mergeAgentsMd.js` | writes AGENTS.md; redirects CLAUDE.md and GEMINI.md to it |
 | `templates/AGENTS.snippet.md` | the memory/task boundary injected into every onboarded repo |
 | `templates/MEMORY.template.md` | starting `docs/memory/MEMORY.md` for onboarded repos |
 | `templates/MEMORY_SHORTTERM.template.md` | starting short-term log, with the archiving policy |

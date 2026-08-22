@@ -69,20 +69,35 @@ Onboard as many projects as you like — `update` walks all of them.
 1. Checks prerequisites and detects which agent CLIs you have (`claude`,
    `gemini`, `kimi`, `codex`, `cursor-agent`).
 2. Installs Backlog.md and runs `backlog init`, which writes `CLAUDE.md`,
-   `AGENTS.md`, and `GEMINI.md` so every agent gets the same instructions.
-   Adds a **`Needs Attention`** status — the one column that means "a human
-   is needed", whether the work finished or got stuck.
+   `AGENTS.md`, and `GEMINI.md`. Adds a **`Needs Attention`** status — the one
+   column that means "a human is needed", whether the work finished or got
+   stuck.
 3. Scaffolds the memory layer under `docs/memory/`: `MEMORY.md`,
    `MEMORY_SHORTTERM.md`, and `archived/`. A pre-0.5 layout is migrated in
    place — `docs/MEMORY.md` moves, and old `memory/*.md` logs become archived
    sessions.
-4. Merges the agentcrew block into all three agent instruction files.
+4. Merges the agentcrew block into `AGENTS.md`, and reduces `CLAUDE.md` and
+   `GEMINI.md` to a one-line redirect to it. One file holds the rules, so
+   three copies can't drift apart. Rules you wrote by hand in either file are
+   folded into `AGENTS.md` first — nothing is dropped.
 5. Installs the planning skills.
 6. Registers the project in `~/.agentcrew/state.json`.
 
 Every step is idempotent. Re-running never duplicates a block, never
 overwrites an existing `MEMORY.md`, never deletes a log, and never touches
 your tasks.
+
+## One rules file
+
+```text
+AGENTS.md   ←  every rule lives here
+CLAUDE.md   →  "All agent rules live in @AGENTS.md — read that file."
+GEMINI.md   →  same one-liner
+```
+
+Claude Code and Gemini CLI both expand an `@file` reference, so the redirect
+loads the real rules rather than hoping the agent follows a hint. Editing
+`AGENTS.md` changes what every agent reads.
 
 ## The memory layer
 

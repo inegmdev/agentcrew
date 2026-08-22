@@ -34,3 +34,7 @@ _Nothing archived yet._
 
 - 22:27 memory layer restructured → docs/memory/ (MEMORY.md, MEMORY_SHORTTERM.md, archived/); archiving policy added to the agentcrew block; 0.5.0
 - 22:27 migration lives in scaffoldMemory.js — legacy docs/MEMORY.md moves, memory/*.md logs become indexed archives; verified idempotent
+
+## 2026-08-22
+
+- 00:40 AGENTS.md is now the only rules file; CLAUDE.md/GEMINI.md are one-line @AGENTS.md redirects, hand-written rules folded in before replacement

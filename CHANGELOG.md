@@ -18,6 +18,12 @@ context was either kept forever or lost to a `rm`.
   and writes `docs/memory/MEMORY.proposed.md`.
 
 **Added**
+- **One rules file.** The agentcrew block now goes into `AGENTS.md` only;
+  `CLAUDE.md` and `GEMINI.md` become a one-line redirect to it
+  (`All agent rules live in @AGENTS.md`). Both CLIs expand `@file`, so the
+  redirect imports the rules rather than hinting at them, and three copies of
+  the same rules can no longer drift. Rules a human wrote in either file are
+  folded into `AGENTS.md` before it is replaced, so nothing is lost.
 - A short-term memory **cleanup & archiving policy** in the agentcrew block,
   so every onboarded repo tells its agent the same thing: never delete daily
   logs — move them into `docs/memory/archived/session_YYYY_MM_DD.md`, clear

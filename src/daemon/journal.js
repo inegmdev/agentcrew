@@ -1,26 +1,42 @@
 const fs = require('fs');
 const path = require('path');
+const { memoryPaths, appendDayEntry } = require('../lib/memory');
+
+const SHORT_TERM_HEADER = `# Short-term memory
+
+Append-only working log. One \`## YYYY-MM-DD\` section per day, newest at the
+bottom. Archive old sections into \`docs/memory/archived/\` rather than
+deleting them.
+
+## Archive index
+
+<!-- One link per archived session, newest last. -->
+
+## Active logs
+`;
 
 /**
  * Appends to the short-term memory log.
  *
- * This is the safe half of the memory layer: append-only, never rewritten, and
- * recoverable from git even if deleted. Consolidation — the half that drops
- * things — is deliberately kept out of here.
+ * This is the safe half of the memory layer: additive only, never rewritten,
+ * and recoverable from git even if edited. Consolidation — the half that drops
+ * things — is deliberately kept out of here, and so is archiving, which moves
+ * old sections out to `docs/memory/archived/` under human or agent judgement.
  */
 function appendToJournal(projectPath, line, now = new Date()) {
-  const dir = path.join(projectPath, 'memory');
-  const file = path.join(dir, `${isoDate(now)}.md`);
+  const { dir, shortTerm } = memoryPaths(projectPath);
 
   fs.mkdirSync(dir, { recursive: true });
 
-  const header = `# ${isoDate(now)}\n\n`;
-  const exists = fs.existsSync(file);
-  const prefix = exists ? '' : header;
-  const entry = `- ${isoTime(now)} ${line}\n`;
+  const existing = fs.existsSync(shortTerm)
+    ? fs.readFileSync(shortTerm, 'utf8')
+    : SHORT_TERM_HEADER;
 
-  fs.appendFileSync(file, prefix + entry);
-  return file;
+  const entry = `- ${isoTime(now)} ${line}`;
+  const updated = appendDayEntry(existing, isoDate(now), entry);
+
+  fs.writeFileSync(shortTerm, updated.endsWith('\n') ? updated : `${updated}\n`);
+  return shortTerm;
 }
 
 /**
@@ -46,4 +62,4 @@ function isoTime(d) {
   return d.toISOString().slice(11, 16);
 }
 
-module.exports = { appendToJournal, describeTransition, isoDate };
+module.exports = { appendToJournal, describeTransition, isoDate, SHORT_TERM_HEADER };

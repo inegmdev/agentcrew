@@ -1,6 +1,6 @@
 const fs = require('fs');
-const path = require('path');
 const { runCaptured } = require('../lib/shell');
+const { memoryPaths, daySections } = require('../lib/memory');
 const { resolveAgent, headlessArgs } = require('./agents');
 const { isoDate } = require('./journal');
 
@@ -10,8 +10,9 @@ const WINDOW_DAYS = 7;
 
 const PROMPT = `You are consolidating a software project's memory.
 
-Below is the project's current long-term memory (MEMORY.md), followed by
-recent short-term daily logs.
+Below is the project's current long-term memory (docs/memory/MEMORY.md),
+followed by recent day sections from the short-term log
+(docs/memory/MEMORY_SHORTTERM.md).
 
 Rewrite MEMORY.md so that:
 - anything in the daily logs that will still matter in a month is folded in
@@ -23,21 +24,28 @@ Rewrite MEMORY.md so that:
 Output ONLY the new MEMORY.md content. No preamble, no code fences.`;
 
 /**
- * Collects the recent daily logs that consolidation should consider.
+ * Collects the recent day sections that consolidation should consider.
+ *
+ * Only the active logs are read. Archived sessions under
+ * `docs/memory/archived/` are deliberately out of scope: they were archived
+ * because they had stopped being current, and pulling them back in would undo
+ * the archiving that keeps this pass cheap.
  */
 function recentLogs(projectPath, now = new Date(), windowDays = WINDOW_DAYS) {
-  const dir = path.join(projectPath, 'memory');
-  const logs = [];
-
-  for (let i = 0; i < windowDays; i++) {
-    const day = new Date(now.getTime() - i * 86400000);
-    const file = path.join(dir, `${isoDate(day)}.md`);
-    if (fs.existsSync(file)) {
-      logs.push({ date: isoDate(day), contents: fs.readFileSync(file, 'utf8') });
-    }
+  const { shortTerm } = memoryPaths(projectPath);
+  if (!fs.existsSync(shortTerm)) {
+    return [];
   }
 
-  return logs.reverse();
+  const wanted = new Set();
+  for (let i = 0; i < windowDays; i++) {
+    wanted.add(isoDate(new Date(now.getTime() - i * 86400000)));
+  }
+
+  return daySections(fs.readFileSync(shortTerm, 'utf8'))
+    .filter((section) => wanted.has(section.date))
+    .map((section) => ({ date: section.date, contents: section.body }))
+    .sort((a, b) => a.date.localeCompare(b.date));
 }
 
 /**
@@ -57,9 +65,9 @@ function consolidate(projectPath, options = {}) {
     return { ok: false, reason: 'no agent CLI available to run consolidation' };
   }
 
-  const memoryPath = path.join(projectPath, 'docs', 'MEMORY.md');
-  if (!fs.existsSync(memoryPath)) {
-    return { ok: false, reason: 'docs/MEMORY.md not found — run agentcrew setup first' };
+  const { longTerm, proposal } = memoryPaths(projectPath);
+  if (!fs.existsSync(longTerm)) {
+    return { ok: false, reason: 'docs/memory/MEMORY.md not found — run agentcrew setup first' };
   }
 
   const logs = recentLogs(projectPath, options.now);
@@ -70,7 +78,7 @@ function consolidate(projectPath, options = {}) {
   const input = [
     PROMPT,
     '\n===== CURRENT MEMORY.md =====\n',
-    fs.readFileSync(memoryPath, 'utf8'),
+    fs.readFileSync(longTerm, 'utf8'),
     '\n===== RECENT DAILY LOGS =====\n',
     ...logs.map((l) => `--- ${l.date} ---\n${l.contents}`),
   ].join('\n');
@@ -84,13 +92,12 @@ function consolidate(projectPath, options = {}) {
     return { ok: false, reason: `${agent.bin} returned nothing` };
   }
 
-  const proposalPath = path.join(projectPath, 'docs', 'MEMORY.proposed.md');
-  fs.writeFileSync(proposalPath, output.endsWith('\n') ? output : `${output}\n`);
+  fs.writeFileSync(proposal, output.endsWith('\n') ? output : `${output}\n`);
 
   return {
     ok: true,
     agent: agent.bin,
-    proposalPath,
+    proposalPath: proposal,
     daysConsidered: logs.length,
   };
 }

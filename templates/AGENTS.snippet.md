@@ -5,22 +5,39 @@
 
 | Tier | Where | When to read it |
 |---|---|---|
-| long-term | `docs/MEMORY.md` | every session, first thing |
+| long-term | `docs/memory/MEMORY.md` | every session, first thing |
 | decisions | `backlog decision list` | before revisiting a settled question |
-| short-term | `memory/YYYY-MM-DD.md` | today's and yesterday's only |
+| short-term | `docs/memory/MEMORY_SHORTTERM.md` | every session, review recent daily logs |
+| archives | `docs/memory/archived/` | on demand, for full context of past chats |
 
-- **Start of session:** read `docs/MEMORY.md`, then today's and yesterday's
-  `memory/` logs if they exist. Do not read older logs unless you're looking
-  for something specific — the window exists to keep sessions cheap.
-- **During work:** append to `memory/<today>.md` freely. It is append-only
-  and disposable; nothing there is precious.
+- **Start of session:** read `docs/memory/MEMORY.md` first, then review the
+  recent active logs inside `docs/memory/MEMORY_SHORTTERM.md`.
+- **During work:** append today's notes under a `## YYYY-MM-DD` section inside
+  `docs/memory/MEMORY_SHORTTERM.md` freely. It is append-only and disposable.
 - **Durable findings:** anything still true in a month belongs in
-  `docs/MEMORY.md`, which is distilled, not a log. Keep it under ~200 lines.
-  A decision with real reasoning behind it goes to
-  `backlog decision create "..."` instead, and `docs/MEMORY.md` links to it.
+  `docs/memory/MEMORY.md`, which is distilled, not a log. Keep it under ~200
+  lines. A decision with real reasoning behind it goes to
+  `backlog decision create "..."` instead.
 - **Consolidation:** `agentcrew consolidate` distils recent logs into a
-  proposed `docs/MEMORY.proposed.md`. It never overwrites `docs/MEMORY.md` —
-  a human accepts the result, because consolidation drops things on purpose.
+  proposed `docs/memory/MEMORY.proposed.md`. It never overwrites
+  `docs/memory/MEMORY.md` — a human accepts the result, because consolidation
+  drops things on purpose.
+
+### 🧹 Short-term memory cleanup & archiving policy
+
+To prevent context bloat and keep the agent efficient, short-term memory must
+be cleaned up periodically using a strict **archiving workflow**:
+
+1. **Do not delete without backup:** never simply delete daily logs from
+   `docs/memory/MEMORY_SHORTTERM.md`.
+2. **Compile an archive file:** move the old logs into a new individual,
+   session-specific markdown file inside `docs/memory/archived/` (named
+   sequentially, e.g. `session_YYYY_MM_DD.md`, representing the conversation
+   or date).
+3. **Link the archive:** clear those logs from `MEMORY_SHORTTERM.md`'s
+   **Active logs**, and add a markdown link to the new archived file under its
+   **Archive index** section. This preserves the complete, untouched context of
+   past conversations for future retrieval.
 
 ### Tasks
 

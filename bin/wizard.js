@@ -40,8 +40,8 @@ async function setupProject(projectPath) {
   console.log(
     '\n=== Setup done. Two steps left that need a human: ===\n' +
       '  1. Run /setup-matt-pocock-skills inside your agent, in this repo.\n' +
-      '  2. Fill in docs/MEMORY.md — what this project is, and why it is built\n' +
-      '     the way it is. Everything else grows from there.\n\n' +
+      '  2. Fill in docs/memory/MEMORY.md — what this project is, and why it is\n' +
+      '     built the way it is. Everything else grows from there.\n\n' +
       '  Then: `backlog board` for the TUI, or `backlog browser` for the web UI.\n'
   );
 }
@@ -105,7 +105,7 @@ function runConsolidate(projectPath) {
 
   console.log(`  Considered ${result.daysConsidered} day(s) of logs via ${result.agent}.`);
   console.log(`  Proposal: ${result.proposalPath}`);
-  console.log('\n  Nothing was overwritten. Diff it against docs/MEMORY.md and');
+  console.log('\n  Nothing was overwritten. Diff it against docs/memory/MEMORY.md and');
   console.log('  replace that file only if you agree with what was dropped.\n');
 }
 

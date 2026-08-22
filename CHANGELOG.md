@@ -1,5 +1,49 @@
 # Changelog
 
+## 0.5.0
+
+Restructured the memory layer around one directory and made cleanup a defined
+workflow. Short-term memory was one file per day, spread between `docs/` and
+`memory/`, and "delete the old ones" was the only cleanup story — so old
+context was either kept forever or lost to a `rm`.
+
+**Changed**
+- The whole memory layer now lives under `docs/memory/`:
+  `MEMORY.md` (long-term), `MEMORY_SHORTTERM.md` (short-term),
+  `MEMORY.proposed.md` (consolidation output), `archived/` (retired logs).
+- Short-term memory is **one file with `## YYYY-MM-DD` sections**, not one
+  file per day. An agent reads recent sections in a single read.
+- The daemon journals transitions into today's section of
+  `docs/memory/MEMORY_SHORTTERM.md`; consolidation reads its recent sections
+  and writes `docs/memory/MEMORY.proposed.md`.
+
+**Added**
+- **One rules file.** The agentcrew block now goes into `AGENTS.md` only;
+  `CLAUDE.md` and `GEMINI.md` become a one-line redirect to it
+  (`All agent rules live in @AGENTS.md`). Both CLIs expand `@file`, so the
+  redirect imports the rules rather than hinting at them, and three copies of
+  the same rules can no longer drift. Rules a human wrote in either file are
+  folded into `AGENTS.md` before it is replaced, so nothing is lost.
+- A short-term memory **cleanup & archiving policy** in the agentcrew block,
+  so every onboarded repo tells its agent the same thing: never delete daily
+  logs — move them into `docs/memory/archived/session_YYYY_MM_DD.md`, clear
+  them from **Active logs**, and link them under **Archive index**. The
+  archive keeps past conversations whole and reachable.
+- `templates/MEMORY_SHORTTERM.template.md` and `templates/ARCHIVED.readme.md`.
+- `src/lib/memory.js` — memory paths, day-section parsing, archive-index
+  insertion, shared by the setup step and the daemon.
+- Migration on re-run: `agentcrew update` moves `docs/MEMORY.md` (and any
+  pending proposal) into `docs/memory/`, and archives each legacy
+  `memory/YYYY-MM-DD.md` as an indexed session. Nothing is deleted, and a
+  second run is a no-op.
+
+**Design notes**
+- Archiving is markdown policy, not a CLI command. Which conversation is over
+  is a judgment call, and enforcement stays agent-agnostic (decision 4) rather
+  than depending on a tool a corporate machine may not let you install.
+- Consolidation still reads only the active logs. Archived sessions are out of
+  scope by design — pulling them back in would undo the archiving.
+
 ## 0.4.0
 
 One-line install. The capability was already there — `bin/` and a shebang

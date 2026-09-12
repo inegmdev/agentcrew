@@ -74,6 +74,13 @@ abandoned, you lose a TUI and keep every task.
    would ever look there; a linked archive stays reachable. Enforcement is the
    markdown policy in `templates/AGENTS.snippet.md` — no CLI command, per
    decision 4 (agent-agnostic, no install rights needed).
+8. **Orchestration and credentials are settled in `backlog/decisions/`.**
+   agentcrew now runs its own board, so ADRs live where the tool indexes them.
+   `decision-1` adopts Hermes Agent as the orchestrator in place of the
+   daemon's scheduling ambitions, with markdown kept as the record by fixing
+   the direction of flow. `decision-2` forbids proxying vendor credentials and
+   routes subscription economics through delegation to the official CLIs
+   instead. Both are `proposed`.
 
 ## Verified facts (spiked against backlog.md v1.48.0)
 
@@ -150,6 +157,7 @@ session linked from the index. Nothing is deleted, and re-running is a no-op.
 
 | Path | Role |
 |---|---|
+| `backlog/decisions/` | agentcrew's own ADRs; the repo now dogfoods its board |
 | `bin/wizard.js` | CLI entry: `setup <path>`, `update` |
 | `src/lib/` | shell helpers, state registry (`~/.agentcrew/state.json`) |
 | `src/steps/` | one file per setup step, run in order by the wizard |

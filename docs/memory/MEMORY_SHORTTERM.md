@@ -38,3 +38,12 @@ _Nothing archived yet._
 ## 2026-08-22
 
 - 00:40 AGENTS.md is now the only rules file; CLAUDE.md/GEMINI.md are one-line @AGENTS.md redirects, hand-written rules folded in before replacement
+
+## 2026-09-12
+
+- grilled an incoming design doc: CLIProxyAPI + Hermes Agent + a `.hermes/plugins/backlog-kanban` monkey patch of `hermes_cli.kanban_db` → backlog CLI
+- verified real: Hermes Agent, its dashboard (127.0.0.1:9119), project plugins gated by `HERMES_ENABLE_PROJECT_PLUGINS`, and `hermes_cli.kanban_db`
+- `kanban_db` owns tasks + task_links + task_comments + task_events, WAL, `BEGIN IMMEDIATE`, CAS on claims. Patching 4 functions leaves the rest on SQLite → split brain, and claim loses atomicity (two workers, one task)
+- doc repeats the `--json` error MEMORY.md decision 5 was written about (`--plain` only), and names the package `@mrlesk/backlog` instead of `backlog.md`
+- open decision: this overlaps `src/daemon/` entirely. Either Hermes replaces our daemon or we don't take Hermes. Two orchestrators = decision 1's failure mode
+- CLIProxyAPI fails the selection criterion (login wall + undocumented upstream in the critical path) and conflicts with decision 4 (corporate machine, Gemini only, no install rights)

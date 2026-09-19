@@ -4,9 +4,11 @@ title: 'Health ladder: hook channel, deterministic signals, watchdog'
 status: To Do
 assignee: []
 created_date: '2026-09-19 16:17'
+updated_date: '2026-09-19 16:40'
 labels:
   - supervisor
   - health
+milestone: m-0
 dependencies:
   - TASK-4
 references:

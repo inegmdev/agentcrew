@@ -4,9 +4,11 @@ title: 'Takeover: state machine, enforcement, and forced interrupt'
 status: To Do
 assignee: []
 created_date: '2026-09-19 16:17'
+updated_date: '2026-09-19 16:40'
 labels:
   - supervisor
   - ux
+milestone: m-0
 dependencies:
   - TASK-4
 references:

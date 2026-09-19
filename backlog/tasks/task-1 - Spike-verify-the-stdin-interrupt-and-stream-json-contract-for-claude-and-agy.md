@@ -4,9 +4,11 @@ title: 'Spike: verify the stdin interrupt and stream-json contract for claude an
 status: To Do
 assignee: []
 created_date: '2026-09-19 16:17'
+updated_date: '2026-09-19 16:40'
 labels:
   - spike
   - adapters
+milestone: m-0
 dependencies: []
 references:
   - >-

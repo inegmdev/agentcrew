@@ -4,8 +4,10 @@ title: 'Session supervisor: spawn, stream, persist, resume'
 status: To Do
 assignee: []
 created_date: '2026-09-19 16:17'
+updated_date: '2026-09-19 16:40'
 labels:
   - supervisor
+milestone: m-0
 dependencies:
   - TASK-2
   - TASK-3

@@ -30,8 +30,12 @@ turn from installer to supervisor, plus the board it will be built on.
   and recorded fixtures drive everything; drift detection moves to a
   maintainer's machine as a fixture refresh. Gemini CLI is kept as a mocked
   adapter for locked-down corporate machines, shipped unverified.
-- `task-1` through `task-9`: the first slice, gated on `task-1`, a protocol
-  spike against real `claude` and `agy` builds.
+- The `Supervisor v1` milestone, `task-1` through `task-10`. Two entry points
+  run in parallel: `task-10`, a clickable mockup driven by a hand-written
+  sample event stream, and `task-1`, a protocol spike against real `claude`
+  and `agy` builds. The mockup comes before the schema deliberately, so the
+  screens and the event shape are designed against each other rather than the
+  screens being fitted to whatever the schema turned out to be.
 
 **Changed**
 - `decision-1` marked **superseded**. Adopting Hermes Agent as the orchestrator

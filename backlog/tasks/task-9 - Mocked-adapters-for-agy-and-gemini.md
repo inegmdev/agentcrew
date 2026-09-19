@@ -4,8 +4,10 @@ title: Mocked adapters for agy and gemini
 status: To Do
 assignee: []
 created_date: '2026-09-19 16:17'
+updated_date: '2026-09-19 16:40'
 labels:
   - adapters
+milestone: m-0
 dependencies:
   - TASK-3
 references:

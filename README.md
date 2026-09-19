@@ -318,8 +318,13 @@ The reasoning, including what was rejected and why, is in
 
 The board, memory layer, and daemon all work and are verified against real
 installs. The supervisor above is **designed, not built** — it sits on the
-board as `task-1` through `task-9`, gated on a protocol spike, because one
-mechanism it depends on is undocumented for the raw CLI.
+board as the `Supervisor v1` milestone, `task-1` through `task-10`.
+
+Two things start it, and they run in parallel. `task-10` is a clickable
+mockup, so the screens can be argued about before anything is built. `task-1`
+is a protocol spike against the real CLIs, because one mechanism the design
+depends on is undocumented for the raw CLI. Everything else waits on one of
+them.
 
 Not yet built: worktree isolation and agent launching. Moving a task to
 `In Progress` is journalled but does not yet spin up a worktree and start an

@@ -4,9 +4,11 @@ title: agentcrew doctor and the first CI workflow
 status: To Do
 assignee: []
 created_date: '2026-09-19 16:17'
+updated_date: '2026-09-19 16:40'
 labels:
   - testing
   - cli
+milestone: m-0
 dependencies: []
 references:
   - >-

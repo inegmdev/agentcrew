@@ -4,9 +4,12 @@ title: Define the agentcrew event schema and forensics fields
 status: To Do
 assignee: []
 created_date: '2026-09-19 16:17'
+updated_date: '2026-09-19 16:40'
 labels:
   - schema
-dependencies: []
+milestone: m-0
+dependencies:
+  - TASK-10
 references:
   - >-
     backlog/decisions/decision-3 -

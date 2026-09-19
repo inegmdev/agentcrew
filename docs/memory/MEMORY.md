@@ -134,9 +134,11 @@ the daemon loses automation and event history, never tasks.
 ## Not yet done
 
 - **The supervisor slice.** Designed in decision-3 through decision-6, sitting
-  on the board as task-1 through task-9. Nothing built. Start with task-1, the
-  protocol spike, before writing supervisor code: decision-5 rests on an
-  in-band interrupt that is undocumented for the raw CLI.
+  on the board as the `Supervisor v1` milestone, task-1 through task-10.
+  Nothing built. Two entry points, run in parallel: task-10, a clickable
+  mockup that settles the screens and seeds the event schema, and task-1, a
+  protocol spike, because decision-5 rests on an in-band interrupt that is
+  undocumented for the raw CLI. Everything else depends on one of them.
 - **Worktree isolation and agent launching.** Now framed as the `worktree`
   runtime in decision-3's adapter/runtime split.
 - **Nothing is auto-committed.** The daemon writes files; it doesn't commit or
@@ -167,7 +169,7 @@ deleted.
 | Path | Role |
 |---|---|
 | `backlog/decisions/` | agentcrew's own ADRs; the repo dogfoods its board |
-| `backlog/tasks/` | agentcrew's own board; the supervisor slice is task-1..9 |
+| `backlog/tasks/` | agentcrew's own board; `Supervisor v1` is task-1..10 |
 | `bin/wizard.js` | CLI entry: `setup <path>`, `update`, `daemon` |
 | `src/lib/` | shell helpers, state registry (`~/.agentcrew/state.json`) |
 | `src/lib/memory.js` | memory paths, day-section parsing, archive index |

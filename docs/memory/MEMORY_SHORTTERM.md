@@ -52,3 +52,53 @@ _Nothing archived yet._
 - bigger objection to wrapping a CLI as `/v1/chat/completions` is technical, not legal: stateless completions replay history through a full agent loop, and the CLI runs its own tools instead of emitting `tool_calls`, so Hermes's tool protocol breaks silently. Delegation ≠ completion endpoint
 - agentcrew now dogfoods its own board: `backlog init --integration-mode none` → `backlog/config.yml` + `backlog/decisions/`. Wrote decision-1 (Hermes replaces the daemon) and decision-2 (never proxy credentials), both `proposed`
 - installed backlog.md resolved to **1.52.0**; MEMORY.md's verified-facts block still says 1.48.0. Re-spike before trusting those notes
+
+## 2026-09-19
+
+Design session. Direction reversed from decision-1: **we build the orchestrator, not Hermes.**
+The forcing function is human takeover of a running session — you cannot hand a human a
+session another program owns internally. Numbered points as discussed:
+
+- **#1** adapters normalise into *our own* event schema; an OpenAI-compatible facade is an
+  optional output adapter later, never in the hot path. Chat-completions cannot carry
+  permission requests, tool events, session ids or cost, which are the health signals.
+- **#2** no message hashing. Both `claude` and `agy` accept `--session-id <uuid>` and
+  `--resume`, so we mint the id and use it as the primary key.
+- **#3** stuck ladder, cheapest first: hook pushes (`Notification` with `agent_needs_input`,
+  `permission_prompt`, `idle_prompt`; `Stop`; `SessionEnd`) → deterministic stream analysis →
+  LLM watchdog → wall-clock as the liveness net under everything.
+  Busy is a supervisor-owned flag: input is queued, never rejected, so there is no
+  backpressure to read. Feed it from `--replay-user-messages` acks, turn `result` events, hooks.
+  Health is an enum, not a boolean: working / waiting_for_input / rate_limited / stuck /
+  crashed / done. `system/api_retry` carries the rate-limit and auth categories.
+  Traps: **never `--bare`** (skips hook discovery, kills tier 0); keep our timeout above
+  `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS` (10 min default) or we fight the CLI; check a
+  child-written nonce, not the pid, because pids get reused.
+- **#4** transport is the CLI's own stdio (`--input-format stream-json`), not the Agent SDK.
+- **#5** two axes: `adapter` (which CLI) vs `runtime` (local / worktree / docker / ssh).
+  Conflating them means rewriting every adapter when docker lands.
+- **#6** DB lives at `~/.agentcrew/projects/<id>/`, never in the repo (`git clean -xdf`).
+  Project identity = a uuid inside `.git/` (survives clean and moves, distinct per clone,
+  never committed); resolve via `git rev-parse --git-common-dir` for worktrees.
+  Orphans are marked `unreachable`, never auto-deleted; UI offers relocate or typed-confirm
+  delete. One daemon per project, sole writer, own port in the registry, lock file.
+  Events table holds small rows only; large payloads spill to content-addressed blobs.
+- **#7** interrupts: signals are **not** portable. POSIX has SIGINT (ends the turn) and
+  SIGTERM (exit 143, turn unfinished but resumable). On Windows Node ignores the signal and
+  force-kills. So: in-band interrupt first (feature-detect `interrupt_receipt_v1` in
+  `system/init.capabilities`), `PreToolUse` deny as the portable soft freeze, per-OS hard kill
+  in the runtime layer. **Spike the stdin interrupt before building on it** — undocumented,
+  open feature request upstream.
+- **#8** full tier only. Corrects MEMORY.md decision 4: nothing needs admin
+  (`npm config set prefix ~/.local`). Real corporate blockers are no Node, TLS-intercepting
+  proxies, account policy, endpoint protection killing daemons, port binding. The constraint
+  is *which CLI is permitted*, not install rights.
+- **#9** order: claude, then agy. Gemini CLI is dead for free/Pro/Ultra; API-key path unverified.
+- **#10** forensics: ship the *schema* in phase 1, the explorer UI later. `started_by` and
+  `ended_by` as `{reason, actor, caused_by}`, and `caused_by` on every event. Causality cannot
+  be backfilled. Do not poll `ps`; `PostToolUse`/`PostToolUseFailure` give tool-level truth.
+- **#11/#12/#13** testing: fake CLI binaries + recorded fixtures, contract suite per adapter,
+  injected clock/ids/fs root, `agentcrew doctor --json` as the user-facing CI gate, idempotency
+  job. No live credentials in CI at all.
+
+Repo state: no tests, no `.github/`, zero dependencies. Use `node:test` and keep it that way.

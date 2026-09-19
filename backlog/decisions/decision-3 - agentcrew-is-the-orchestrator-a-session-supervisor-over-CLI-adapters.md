@@ -56,10 +56,24 @@ Busy is supervisor-owned state. Streaming input queues messages rather than
 rejecting them, so there is no backpressure to read; feed the flag from
 `--replay-user-messages` acknowledgements, turn `result` events and hooks.
 
-**Takeover is a state machine**, not a button:
-`auto → pausing → human_owned → releasing → auto`. While `human_owned` the
+**Takeover is a state machine**, not a button. While `human_owned` the
 supervisor sends no input, and enforcement is a `PreToolUse` deny rather than
 trust. Every transition is an event naming the actor.
+
+```mermaid
+stateDiagram-v2
+    [*] --> auto
+    auto --> pausing: human asks to take over
+    pausing --> human_owned: interrupt lands
+    human_owned --> releasing: human hands back
+    releasing --> auto: supervisor resumes the session
+    auto --> [*]: task done
+    note right of human_owned
+        Supervisor sends no input.
+        Enforced by denying the agent's
+        tool calls, not by trust.
+    end note
+```
 
 **Forensics ship as schema in phase 1**, as UI later. Every event carries
 `caused_by`. Every process and turn carries `started_by` and `ended_by` as

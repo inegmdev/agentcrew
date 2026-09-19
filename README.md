@@ -210,13 +210,90 @@ sessions rather than firing them and hoping. The requirement that drives it is
 human takeover — you watch the board, see an agent stuck, and take the wheel
 mid-task. You cannot do that with a session another program owns.
 
-```text
-backlog/tasks/*.md   ──intent──>  supervised session  ──runs──>  result
-  (record, in git)                (claude · agy · gemini)
-        ^                                                   │
-        └──────────── coarse status written back ───────────┘
-                        single writer, one way
+### The loop it is built around
+
+```mermaid
+sequenceDiagram
+    actor Dev as You
+    participant Board as Board
+    participant Sup as Supervisor
+    participant CLI as Agent CLI
+    participant Store as Event store
+
+    Dev->>Board: promote a task
+    Board->>Sup: intent
+    Sup->>CLI: spawn with a minted session id
+    Sup->>Board: status becomes In Progress
+    CLI-->>Sup: stream of events
+    Sup->>Store: append every event
+
+    Note over CLI: the agent hits a wall
+    CLI-->>Sup: hook push, agent_needs_input
+    Sup->>Store: health becomes waiting_for_input
+    Sup-->>Dev: surfaced on the board
+
+    alt a nudge is enough
+        Sup->>CLI: resume with guidance
+    else a human is needed
+        Dev->>Sup: take over
+        Sup->>CLI: deny further tool calls
+        Dev->>CLI: drive the session directly
+        Dev->>Sup: release
+    end
+
+    CLI-->>Sup: result
+    Sup->>Store: ended_by completed
+    Sup->>Board: status becomes Done
 ```
+
+Intent flows one way, from the board into a session. Only coarse status comes
+back, written by a single writer, so the two can never disagree about what is
+being worked on.
+
+### Where each kind of data lives
+
+```mermaid
+flowchart TB
+    subgraph git["In your repo, versioned in git"]
+        T["backlog/tasks/*.md<br/>intent"]
+        D["backlog/decisions/*.md"]
+        M["docs/memory/<br/>long-term and short-term"]
+    end
+
+    subgraph home["Outside the repo, under ~/.agentcrew"]
+        REG["registry<br/>id, path, port, pid"]
+        DB[("per-project SQLite<br/>events, sessions, processes")]
+        BLOB["blobs/<br/>large tool payloads"]
+    end
+
+    subgraph run["Running"]
+        SUP["Supervisor<br/>one daemon per project"]
+        AD["Adapter<br/>claude, agy, gemini, mock"]
+        RT["Runtime<br/>local, worktree, docker, ssh"]
+        AG["Agent CLI process"]
+    end
+
+    UI["Web UI"]
+
+    T -->|"intent"| SUP
+    SUP -->|"coarse status only"| T
+    SUP --> AD --> RT --> AG
+    AG -->|"stream-json"| AD
+    AG -->|"hook pushes"| SUP
+    AD -->|"normalised events"| SUP
+    SUP -->|"small rows"| DB
+    SUP -->|"payloads over the row cap"| BLOB
+    DB -.->|"hash reference"| BLOB
+    SUP --> REG
+    SUP -->|"day sections"| M
+    UI -->|"read only"| DB
+    UI -->|"discovers projects"| REG
+```
+
+Tasks, decisions and memory are intent: hand-edited, reviewed, and yours in
+markdown. Transcripts, process rows and heartbeats are events: append-only,
+machine-queried, and far too chatty for git. The store sits outside the repo
+because `git clean -xdf` would delete it.
 
 What that means in practice:
 

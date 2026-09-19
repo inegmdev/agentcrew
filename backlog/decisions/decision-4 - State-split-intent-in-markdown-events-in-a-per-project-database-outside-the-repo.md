@@ -30,6 +30,17 @@ Split state by **intent versus events**.
 Markdown receives coarse transitions only: claimed, blocked, done. Heartbeats
 and live status never touch git.
 
+```mermaid
+flowchart LR
+    AG["Agent session"] -->|"every event"| SUP["Supervisor<br/>sole writer"]
+    SUP -->|"small rows"| DB[("~/.agentcrew/projects/id<br/>agentcrew.db")]
+    SUP -->|"over the row cap"| BLOB["blobs/<br/>content addressed"]
+    DB -.->|"hash"| BLOB
+    SUP -->|"claimed, blocked, done"| MD["backlog/tasks/*.md<br/>in git"]
+    SUP -.->|"never"| X["heartbeats in git"]
+    style X stroke-dasharray: 4 4
+```
+
 **Location.** `~/.agentcrew/projects/<project-id>/agentcrew.db`, with `blobs/`
 beside it and a registry alongside holding id, path, port, pid and last seen.
 

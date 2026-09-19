@@ -4,12 +4,13 @@ title: Build the fake claude binary and the adapter contract suite
 status: To Do
 assignee: []
 created_date: '2026-09-19 16:17'
-updated_date: '2026-09-19 16:40'
+updated_date: '2026-09-19 16:41'
 labels:
   - testing
   - adapters
 milestone: m-0
-dependencies: []
+dependencies:
+  - TASK-1
 references:
   - >-
     backlog/decisions/decision-6 -

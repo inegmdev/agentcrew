@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>agentcrew — Session (mockup)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --border: #dde1e6; --text: #1c2430; --muted: #5b6675;
+    --working: #2b6cb0; --waiting: #b7791f; --rate: #6b46c1; --stuck: #c2410c; --crashed: #c53030; --done: #2f855a;
+    --auto: #7b8794; --human: #2b6cb0; --agent: #eef2f7; --operator: #e6f0ff;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header.top { background: var(--panel); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+  header.top h1 { font-size: 16px; margin: 0; }
+  nav.pages a { color: var(--working); text-decoration: none; margin-right: 14px; font-size: 13px; }
+  nav.pages a:hover { text-decoration: underline; }
+  .banner { background: #fff8e1; border-bottom: 1px solid #f0d98c; color: #6b5300; padding: 6px 24px; font-size: 12px; }
+  select { font: inherit; padding: 4px 6px; }
+  main { max-width: 980px; margin: 24px auto; padding: 0 24px; display: grid; gap: 16px; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 16px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 10px 24px; align-items: center; }
+  .meta .item { font-size: 12.5px; color: var(--muted); }
+  .meta .item b { color: var(--text); display: block; font-size: 13px; font-weight: 600; }
+  .badge { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; color: #fff; }
+  .badge.working { background: var(--working); }
+  .badge.waiting_for_input { background: var(--waiting); }
+  .badge.rate_limited { background: var(--rate); }
+  .badge.stuck { background: var(--stuck); }
+  .badge.crashed { background: var(--crashed); }
+  .badge.done { background: var(--done); }
+  .tk { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid; }
+  .tk.auto { color: var(--auto); border-color: var(--auto); background: #f2f4f6; }
+  .tk.human_owned { color: #fff; background: var(--human); border-color: var(--human); }
+  .tk.pausing, .tk.releasing { color: #fff; background: var(--waiting); border-color: var(--waiting); }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  button { font: inherit; padding: 6px 12px; border-radius: 5px; border: 1px solid var(--border); background: #fff; cursor: pointer; }
+  button:hover { background: #f2f4f6; }
+  button.primary { background: var(--human); color: #fff; border-color: var(--human); }
+  button.warn { background: var(--waiting); color: #fff; border-color: var(--waiting); }
+  button.ghost { background: transparent; }
+  .toast { font-size: 12.5px; color: var(--muted); min-height: 1.4em; }
+  .transcript { display: grid; gap: 8px; }
+  .divider { text-align: center; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; margin: 6px 0; }
+  .turncost { color: var(--muted); font-size: 11px; text-align: center; margin-top: -4px; }
+  .bubble { max-width: 78%; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); }
+  .bubble.operator { background: var(--operator); margin-right: auto; }
+  .bubble.agent { background: var(--agent); margin-left: auto; }
+  .bubble .who { font-size: 11px; color: var(--muted); margin-bottom: 3px; }
+  .tool { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; background: #f2f4f6; border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; }
+  .tool .outcome { float: right; font-weight: 600; }
+  .tool .outcome.done { color: var(--done); }
+  .tool .outcome.denied { color: var(--crashed); }
+  .tool .outcome.pending { color: var(--waiting); }
+  .note { font-size: 12.5px; color: var(--muted); text-align: center; }
+  .note.nudge { color: #6b46c1; font-weight: 600; text-align: left; background: #f5f0ff; border: 1px solid #d9c9f7; border-radius: 6px; padding: 6px 10px; }
+  .note.takeover { color: var(--human); font-weight: 600; text-align: left; background: #eef4ff; border: 1px solid #c8dbfa; border-radius: 6px; padding: 6px 10px; }
+  .note.perm-deny { text-align: left; background: #fdecec; border: 1px solid #f3b8b8; border-radius: 6px; padding: 6px 10px; color: #8a2020; }
+  time { border-bottom: 1px dotted var(--muted); cursor: help; }
+</style>
+</head>
+<body>
+<div class="banner">MOCKUP — sample data only, per PRODUCT.md §11.2. Controls below mutate a local copy of the event log; nothing is sent anywhere and reloading resets it.</div>
+<header class="top">
+  <h1>agentcrew — Session</h1>
+  <nav class="pages">
+    <a href="board.html">Board</a>
+    <a href="session.html">Session</a>
+    <a href="forensics.html">Forensics</a>
+  </nav>
+  <select id="picker"></select>
+</header>
+<main>
+  <section class="panel" id="metaPanel"></section>
+  <section class="panel">
+    <div class="controls" id="controls"></div>
+    <div class="toast" id="toast"></div>
+  </section>
+  <section class="panel">
+    <div class="transcript" id="transcript"></div>
+  </section>
+</main>
+
+<script src="sample-events.js"></script>
+<script>
+'use strict';
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function timeAgo(iso) {
+  const s = Math.floor((Date.now() - Date.parse(iso)) / 1000);
+  if (s < 60) return 'just now';
+  const m = Math.floor(s / 60);
+  if (m < 60) return m + 'm ago';
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + 'h ago';
+  return Math.floor(h / 24) + 'd ago';
+}
+function relTime(iso) {
+  return `<time datetime="${iso}" title="${iso}">${timeAgo(iso)}</time>`;
+}
+const HEALTH_LABEL = {
+  working: 'Working', waiting_for_input: 'Waiting for input', rate_limited: 'Rate limited',
+  stuck: 'Stuck', crashed: 'Crashed', done: 'Done',
+};
+function healthBadge(h) { return `<span class="badge ${h}">${HEALTH_LABEL[h] || h}</span>`; }
+const TAKEOVER_LABEL = { auto: 'Auto', pausing: 'Pausing…', human_owned: 'Human owned', releasing: 'Releasing…' };
+function takeoverBadge(t) { return `<span class="tk ${t}">${TAKEOVER_LABEL[t] || t}</span>`; }
+
+const params = new URLSearchParams(location.search);
+const { tasks, sessions } = SAMPLE_EVENTS;
+const DEFAULT_SESSION = sessions[0].id;
+const sessionId = sessions.some(s => s.id === params.get('session')) ? params.get('session') : DEFAULT_SESSION;
+const session = sessions.find(s => s.id === sessionId);
+
+// Local working copy: the interactive controls below append synthetic
+// events to THIS array only. SAMPLE_EVENTS is never mutated, so a reload
+// always returns to the recorded narrative.
+let events = SAMPLE_EVENTS.events.filter(e => e.session_id === sessionId).map(e => JSON.parse(JSON.stringify(e))).sort((a, b) => a.seq - b.seq);
+let mockCounter = 0;
+
+function nextSeq() { return events[events.length - 1].seq + 1; }
+function mockId() { mockCounter += 1; return 'mock_' + mockCounter; }
+function pushEvent(type, actor, causedBy, payload) {
+  const e = { id: mockId(), session_id: sessionId, task_id: session.task_id, seq: nextSeq(), ts: new Date().toISOString(), type, actor, caused_by: causedBy, payload };
+  events.push(e);
+  return e;
+}
+
+// Picker: jump between the seven sample sessions without going back to the board.
+document.getElementById('picker').innerHTML = sessions.map(s =>
+  `<option value="${s.id}" ${s.id === sessionId ? 'selected' : ''}>${escapeHtml(tasks[s.task_id])} — ${s.health}</option>`
+).join('');
+document.getElementById('picker').addEventListener('change', e => {
+  location.href = 'session.html?session=' + encodeURIComponent(e.target.value);
+});
+
+// PRODUCT.md §7.1: walk the event stream to find the CURRENT takeover
+// state, rather than trusting a single stored flag — a "releasing" session
+// with no resume yet is a real, displayable state, not an edge case to hide.
+function computeTakeover() {
+  let state = 'auto';
+  for (const e of events) {
+    if (e.type === 'takeover.requested') state = 'pausing';
+    else if (e.type === 'takeover.acquired') state = 'human_owned';
+    else if (e.type === 'takeover.released') state = 'releasing';
+    else if (e.type === 'turn.started' && state === 'releasing') state = 'auto';
+  }
+  return state;
+}
+
+function totalCost() {
+  return events.filter(e => e.type === 'turn.ended').reduce((sum, e) => sum + e.payload.cost_usd, 0);
+}
+
+function renderMeta() {
+  const tk = computeTakeover();
+  document.getElementById('metaPanel').innerHTML = `
+    <div class="meta">
+      <div class="item"><b>${escapeHtml(tasks[session.task_id])}</b>${session.task_id} · <span title="${session.id}">${session.id.slice(0, 8)}…</span></div>
+      <div class="item"><b>${session.adapter} / ${session.runtime}</b>adapter / runtime</div>
+      <div class="item"><b>${healthBadge(session.health)}</b>health</div>
+      <div class="item"><b id="tkBadge">${takeoverBadge(tk)}</b>takeover</div>
+      <div class="item"><b>$${totalCost().toFixed(3)}</b>session cost</div>
+      <div class="item"><b>${relTime(events[events.length - 1].ts)}</b>last activity</div>
+    </div>`;
+}
+
+// PRODUCT.md §11.2 controls: take over, release, interrupt at level 1, 2 or
+// 3. The interrupt buttons never invent an event type outside §5.2's closed
+// list, so they surface as a toast rather than a fabricated event.
+function renderControls() {
+  const tk = computeTakeover();
+  const buttons = [];
+  if (tk === 'auto') {
+    buttons.push('<button class="primary" id="btnTakeover">Take over</button>');
+  } else if (tk === 'pausing') {
+    buttons.push('<button disabled>Interrupt landing…</button>');
+  } else if (tk === 'human_owned') {
+    buttons.push('<button class="warn" id="btnRelease">Release</button>');
+  } else if (tk === 'releasing') {
+    buttons.push('<button class="ghost" id="btnResume">Resume (supervisor)</button>');
+  }
+  buttons.push('<span style="width:1px;height:20px;background:var(--border);display:inline-block;margin:0 4px;"></span>');
+  buttons.push('<button class="ghost" data-interrupt="1">Interrupt: soft freeze (1)</button>');
+  buttons.push('<button class="ghost" data-interrupt="2">Interrupt: end turn (2)</button>');
+  buttons.push('<button class="ghost" data-interrupt="3">Interrupt: hard kill (3)</button>');
+  document.getElementById('controls').innerHTML = buttons.join(' ');
+
+  const toast = document.getElementById('toast');
+  document.getElementById('btnTakeover')?.addEventListener('click', () => {
+    const last = events[events.length - 1];
+    pushEvent('takeover.requested', 'human', last.id, {});
+    render();
+    toast.textContent = 'Interrupt landing (§7.2 gives this a 10s budget)…';
+    setTimeout(() => {
+      const l2 = events[events.length - 1];
+      pushEvent('takeover.acquired', 'human', l2.id, {});
+      render();
+      toast.textContent = 'You are driving. The supervisor denies every agent tool call until you release, per §7.2.';
+    }, 500);
+  });
+  document.getElementById('btnRelease')?.addEventListener('click', () => {
+    const last = events[events.length - 1];
+    pushEvent('takeover.released', 'human', last.id, {});
+    render();
+    toast.textContent = 'Control handed back. Waiting for the supervisor to resume the session.';
+  });
+  document.getElementById('btnResume')?.addEventListener('click', () => {
+    const last = events[events.length - 1];
+    pushEvent('turn.started', 'supervisor', last.id, { turn_index: 99 });
+    render();
+    toast.textContent = 'Supervisor resumed the session.';
+  });
+  document.querySelectorAll('[data-interrupt]').forEach(b => b.addEventListener('click', () => {
+    const level = b.dataset.interrupt;
+    const desc = {
+      1: 'Level 1 (§7.3): a PreToolUse deny. The turn lives; the agent just cannot act.',
+      2: 'Level 2 (§7.3): an in-band interrupt if the CLI advertises it, else SIGINT. Turn ends, session resumable.',
+      3: 'Level 3 (§7.3): hard kill, isolated in the runtime layer per OS. Process gone, session resumable by id.',
+    }[level];
+    toast.textContent = '[mock] ' + desc;
+  }));
+}
+
+// Fold a tool.requested into one line with its outcome, found via §5.3
+// causality rather than an invented linking field — a permission.requested
+// caused by the tool call, its permission.decided, or (for a deny that
+// enforces §7.2 rather than a normal permission flow) a payload.tool_use_id
+// on the deny itself.
+function toolOutcome(reqEvent) {
+  const tuid = reqEvent.payload.tool_use_id;
+  const completed = events.find(e => (e.type === 'tool.completed' || e.type === 'tool.failed') && e.payload.tool_use_id === tuid);
+  if (completed) {
+    return completed.type === 'tool.completed'
+      ? { label: 'done', cls: 'done', detail: completed.payload.duration_ms + 'ms' }
+      : { label: 'failed', cls: 'denied', detail: completed.payload.error };
+  }
+  const permReq = events.find(e => e.type === 'permission.requested' && e.caused_by === reqEvent.id);
+  const decided = permReq
+    ? events.find(e => e.type === 'permission.decided' && e.caused_by === permReq.id)
+    : events.find(e => e.type === 'permission.decided' && e.payload.tool_use_id === tuid);
+  if (decided) {
+    return decided.payload.decision === 'deny'
+      ? { label: 'denied', cls: 'denied', detail: `${decided.payload.reason} — by ${decided.payload.decided_by}` }
+      : { label: 'allowed', cls: 'done', detail: decided.payload.decided_by };
+  }
+  return { label: 'pending', cls: 'pending', detail: '' };
+}
+
+function summarizeInput(input) {
+  if (input.command) return input.command;
+  if (input.file_path) return input.file_path + (input.summary ? ' — ' + input.summary : '');
+  return JSON.stringify(input);
+}
+
+function renderTranscript() {
+  const skip = new Set(['tool.completed', 'tool.failed', 'permission.requested', 'permission.decided', 'session.started', 'session.ended', 'process.spawned', 'process.exited', 'turn.ended']);
+  const html = [];
+  const started = events.find(e => e.type === 'session.started');
+  if (started) {
+    html.push(`<div class="note">Session started — ${started.payload.adapter} on ${started.payload.runtime} · ${escapeHtml(started.payload.cwd)}</div>`);
+  }
+  for (const e of events) {
+    if (skip.has(e.type)) continue;
+    if (e.type === 'turn.started') {
+      html.push(`<div class="divider">Turn ${e.payload.turn_index}</div>`);
+      const end = events.find(x => x.type === 'turn.ended' && x.payload.turn_index === e.payload.turn_index);
+      if (end) html.push(`<div class="turncost">$${end.payload.cost_usd.toFixed(3)} · ${end.payload.tokens.input} in / ${end.payload.tokens.output} out</div>`);
+    } else if (e.type === 'message.user') {
+      html.push(`<div class="bubble operator"><div class="who">${e.payload.source}</div>${escapeHtml(e.payload.text)}</div>`);
+    } else if (e.type === 'message.assistant') {
+      html.push(`<div class="bubble agent"><div class="who">agent</div>${escapeHtml(e.payload.text)}</div>`);
+    } else if (e.type === 'tool.requested') {
+      const o = toolOutcome(e);
+      html.push(`<div class="tool"><span class="outcome ${o.cls}">${o.label}</span>${e.payload.tool_name}: ${escapeHtml(summarizeInput(e.payload.tool_input))}${o.detail ? ' — ' + escapeHtml(String(o.detail)) : ''}</div>`);
+    } else if (e.type === 'health.changed') {
+      html.push(`<div class="note" title="${escapeHtml(JSON.stringify(e.payload.evidence))}">⚙ Health: ${e.payload.from} → ${e.payload.to} (tier ${e.payload.tier})</div>`);
+    } else if (e.type === 'nudge.sent') {
+      html.push(`<div class="note nudge">🔔 Nudge (tier ${e.payload.tier}, ${e.actor}): ${escapeHtml(e.payload.text)}</div>`);
+    } else if (e.type === 'takeover.requested') {
+      html.push('<div class="note takeover">🧑 Operator asked to take over</div>');
+    } else if (e.type === 'takeover.acquired') {
+      html.push('<div class="note takeover">🧑 Operator is now driving — agent tool calls are denied while this holds</div>');
+    } else if (e.type === 'takeover.released') {
+      html.push('<div class="note takeover">🧑 Operator handed control back</div>');
+    }
+  }
+  const ended = events.find(e => e.type === 'session.ended');
+  if (ended) {
+    html.push(`<div class="note">Session ended — ${ended.payload.ended_by.reason}</div>`);
+  }
+  document.getElementById('transcript').innerHTML = html.join('');
+}
+
+function render() {
+  renderMeta();
+  renderControls();
+  renderTranscript();
+}
+
+document.title = `agentcrew — ${tasks[session.task_id]} (mockup)`;
+render();
+</script>
+</body>
+</html>

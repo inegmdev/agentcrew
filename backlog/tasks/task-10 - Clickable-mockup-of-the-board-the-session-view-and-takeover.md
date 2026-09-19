@@ -1,10 +1,11 @@
 ---
 id: TASK-10
 title: 'Clickable mockup of the board, the session view and takeover'
-status: To Do
-assignee: []
+status: In Progress
+assignee:
+  - '@claude'
 created_date: '2026-09-19 16:40'
-updated_date: '2026-09-19 16:51'
+updated_date: '2026-09-19 20:52'
 labels:
   - mockup
   - ux
@@ -49,18 +50,18 @@ and iterate on layout only.
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 the three files above exist and open directly from file:// with no server and no build step
-- [ ] #2 board screen shows all six health states of PRODUCT.md §6.1, visually distinct
-- [ ] #3 session screen renders the transcript from SAMPLE_EVENTS including the tool call and the denied permission request
-- [ ] #4 a stuck row shows its tier and evidence per §6.2 and the proposed nudge text
-- [ ] #5 takeover is shown as the four states of §7.1, not as a button
-- [ ] #6 forensics screen walks caused_by from the last event to its root, per §5.3
-- [ ] #7 sample-events.js is the single source of the sample data; nothing is duplicated into test/
+- [x] #1 the three files above exist and open directly from file:// with no server and no build step
+- [x] #2 board screen shows all six health states of PRODUCT.md §6.1, visually distinct
+- [x] #3 session screen renders the transcript from SAMPLE_EVENTS including the tool call and the denied permission request
+- [x] #4 a stuck row shows its tier and evidence per §6.2 and the proposed nudge text
+- [x] #5 takeover is shown as the four states of §7.1, not as a button
+- [x] #6 forensics screen walks caused_by from the last event to its root, per §5.3
+- [x] #7 sample-events.js is the single source of the sample data; nothing is duplicated into test/
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 node --test passes locally; no test skipped or disabled to get there
-- [ ] #2 PRODUCT.md amended in the same commit if the build had to diverge from it, with the reason
-- [ ] #3 no new runtime dependency added to package.json
+- [x] #1 node --test passes locally; no test skipped or disabled to get there
+- [x] #2 PRODUCT.md amended in the same commit if the build had to diverge from it, with the reason
+- [x] #3 no new runtime dependency added to package.json
 <!-- DOD:END -->

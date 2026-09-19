@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>agentcrew — Forensics (mockup)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --border: #dde1e6; --text: #1c2430; --muted: #5b6675;
+    --working: #2b6cb0; --waiting: #b7791f; --rate: #6b46c1; --stuck: #c2410c; --crashed: #c53030; --done: #2f855a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header.top { background: var(--panel); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+  header.top h1 { font-size: 16px; margin: 0; }
+  nav.pages a { color: var(--working); text-decoration: none; margin-right: 14px; font-size: 13px; }
+  nav.pages a:hover { text-decoration: underline; }
+  .banner { background: #fff8e1; border-bottom: 1px solid #f0d98c; color: #6b5300; padding: 6px 24px; font-size: 12px; }
+  select { font: inherit; padding: 4px 6px; }
+  main { max-width: 1040px; margin: 24px auto; padding: 0 24px; display: grid; gap: 16px; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 16px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 10px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); font-size: 13px; vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 11.5px; text-transform: uppercase; }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+  pre { background: #f2f4f6; border: 1px solid var(--border); border-radius: 6px; padding: 10px; overflow-x: auto; white-space: pre-wrap; }
+  .chain { display: grid; gap: 4px; }
+  .hop { display: grid; grid-template-columns: 90px 160px 1fr; gap: 10px; align-items: baseline; padding: 6px 8px; border-radius: 4px; }
+  .hop.target { background: #eef4ff; border: 1px solid #c8dbfa; }
+  .hop .seq { color: var(--muted); font-family: ui-monospace, monospace; }
+  .hop .type { font-weight: 600; }
+  .hop .actor { color: var(--muted); font-size: 12px; }
+  .arrow { text-align: center; color: var(--muted); font-size: 11px; }
+  time { border-bottom: 1px dotted var(--muted); cursor: help; }
+  .running { color: var(--working); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="banner">MOCKUP — sample data only, per PRODUCT.md §11.3.</div>
+<header class="top">
+  <h1>agentcrew — Forensics</h1>
+  <nav class="pages">
+    <a href="board.html">Board</a>
+    <a href="session.html">Session</a>
+    <a href="forensics.html">Forensics</a>
+  </nav>
+  <select id="picker"></select>
+</header>
+<main>
+  <section class="panel">
+    <h2>Start and end reasons</h2>
+    <div id="reasons"></div>
+  </section>
+  <section class="panel">
+    <h2>Processes</h2>
+    <table id="processes"></table>
+  </section>
+  <section class="panel">
+    <h2>Cause chain</h2>
+    <div style="margin-bottom:10px;">Trace from: <select id="traceFrom"></select></div>
+    <div class="chain" id="chain"></div>
+  </section>
+</main>
+
+<script src="sample-events.js"></script>
+<script>
+'use strict';
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function timeAgo(iso) {
+  const s = Math.floor((Date.now() - Date.parse(iso)) / 1000);
+  if (s < 60) return 'just now';
+  const m = Math.floor(s / 60);
+  if (m < 60) return m + 'm ago';
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + 'h ago';
+  return Math.floor(h / 24) + 'd ago';
+}
+function relTime(iso) {
+  return `<time datetime="${iso}" title="${iso}">${timeAgo(iso)}</time>`;
+}
+
+const params = new URLSearchParams(location.search);
+const { tasks, sessions, events: allEvents } = SAMPLE_EVENTS;
+const DEFAULT_SESSION = sessions[0].id;
+const sessionId = sessions.some(s => s.id === params.get('session')) ? params.get('session') : DEFAULT_SESSION;
+const session = sessions.find(s => s.id === sessionId);
+const events = allEvents.filter(e => e.session_id === sessionId).sort((a, b) => a.seq - b.seq);
+const byId = new Map(events.map(e => [e.id, e]));
+
+document.getElementById('picker').innerHTML = sessions.map(s =>
+  `<option value="${s.id}" ${s.id === sessionId ? 'selected' : ''}>${escapeHtml(tasks[s.task_id])} — ${s.health}</option>`
+).join('');
+document.getElementById('picker').addEventListener('change', e => {
+  location.href = 'forensics.html?session=' + encodeURIComponent(e.target.value);
+});
+
+// PRODUCT.md §11.3: started_by and ended_by "in full" — no summarizing, the
+// operator reading this after a failed overnight run needs every field.
+function renderReasons() {
+  document.getElementById('reasons').innerHTML = `
+    <table>
+      <tr><th style="width:120px">started_by</th><td><pre>${escapeHtml(JSON.stringify(session.started_by, null, 2))}</pre></td></tr>
+      <tr><th>ended_by</th><td><pre>${session.ended_by ? escapeHtml(JSON.stringify(session.ended_by, null, 2)) : '<span class="running">still running — no ended_by yet</span>'}</pre></td></tr>
+    </table>`;
+}
+
+// PRODUCT.md §5.4: never poll ps. This mockup shows exactly what those
+// authoritative sources would have already recorded — one row per
+// process.spawned, paired with its process.exited if one exists yet.
+function renderProcesses() {
+  const spawns = events.filter(e => e.type === 'process.spawned');
+  const exits = events.filter(e => e.type === 'process.exited');
+  const rows = spawns.map((sp, i) => {
+    const ex = exits[i]; // one agent process per session in this sample; paired by order
+    const lifetime = ex ? `${relTime(sp.ts)} → ${relTime(ex.ts)}` : `${relTime(sp.ts)} → <span class="running">still running</span>`;
+    const outcome = ex
+      ? `exit ${ex.payload.exit_code ?? '—'}${ex.payload.term_signal ? ', signal ' + ex.payload.term_signal : ''} (${ex.payload.ended_by.reason})`
+      : '—';
+    return `<tr>
+      <td>agent</td>
+      <td><code>${sp.payload.pid}</code></td>
+      <td><code>${escapeHtml(sp.payload.nonce)}</code></td>
+      <td><code>${escapeHtml(sp.payload.argv.join(' '))}</code></td>
+      <td>${lifetime}</td>
+      <td>${escapeHtml(outcome)}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('processes').innerHTML = `
+    <thead><tr><th>Kind</th><th>PID</th><th>Nonce</th><th>Argv</th><th>Lifetime</th><th>Outcome</th></tr></thead>
+    <tbody>${rows || '<tr><td colspan="6">No process records for this session.</td></tr>'}</tbody>`;
+}
+
+function summarize(e) {
+  const p = e.payload || {};
+  switch (e.type) {
+    case 'session.started': return `${p.adapter} on ${p.runtime}`;
+    case 'message.user': return `"${p.text}"`;
+    case 'message.assistant': return `"${p.text}"`;
+    case 'tool.requested': return `${p.tool_name}: ${p.tool_input.command || p.tool_input.file_path || ''}`;
+    case 'tool.completed': return `${p.duration_ms}ms`;
+    case 'permission.decided': return `${p.decision} by ${p.decided_by}`;
+    case 'health.changed': return `${p.from} → ${p.to} (tier ${p.tier})`;
+    case 'nudge.sent': return `"${p.text}"`;
+    case 'process.exited': return `exit ${p.exit_code ?? '—'} (${p.ended_by.reason})`;
+    case 'session.ended': return p.ended_by.reason;
+    default: return Object.keys(p).length ? JSON.stringify(p) : '';
+  }
+}
+
+// PRODUCT.md §5.3: "the debugging view is a walk up caused_by. That chain is
+// the feature." So walk it literally, root first, target highlighted last.
+function renderChain(targetId) {
+  const chain = [];
+  let cur = byId.get(targetId);
+  while (cur) {
+    chain.unshift(cur);
+    cur = cur.caused_by ? byId.get(cur.caused_by) : null;
+  }
+  document.getElementById('chain').innerHTML = chain.map((e, i) => `
+    ${i > 0 ? '<div class="arrow">↓ caused</div>' : ''}
+    <div class="hop ${e.id === targetId ? 'target' : ''}">
+      <span class="seq">#${e.seq}</span>
+      <span class="type">${e.type}<div class="actor">${e.actor} · ${relTime(e.ts)}</div></span>
+      <span>${escapeHtml(summarize(e))}</span>
+    </div>`).join('');
+}
+
+document.getElementById('traceFrom').innerHTML = events.map(e =>
+  `<option value="${e.id}">#${e.seq} ${e.type}</option>`
+).join('');
+document.getElementById('traceFrom').value = events[events.length - 1].id;
+document.getElementById('traceFrom').addEventListener('change', e => renderChain(e.target.value));
+
+document.title = `agentcrew — Forensics: ${tasks[session.task_id]} (mockup)`;
+renderReasons();
+renderProcesses();
+renderChain(events[events.length - 1].id);
+</script>
+</body>
+</html>

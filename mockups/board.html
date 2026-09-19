@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>agentcrew — Board (mockup)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --border: #dde1e6; --text: #1c2430; --muted: #5b6675;
+    --working: #2b6cb0; --waiting: #b7791f; --rate: #6b46c1; --stuck: #c2410c; --crashed: #c53030; --done: #2f855a;
+    --auto: #7b8794; --human: #2b6cb0;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font: 14px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header.top { background: var(--panel); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; gap: 18px; }
+  header.top h1 { font-size: 16px; margin: 0; }
+  nav.pages a { color: var(--working); text-decoration: none; margin-right: 14px; font-size: 13px; }
+  nav.pages a:hover { text-decoration: underline; }
+  .banner { background: #fff8e1; border-bottom: 1px solid #f0d98c; color: #6b5300; padding: 6px 24px; font-size: 12px; }
+  main { max-width: 1200px; margin: 24px auto; padding: 0 24px; }
+  table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { background: #eef1f4; font-size: 12px; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); }
+  tr.row:hover { background: #f4f7fb; cursor: pointer; }
+  tr.row td:first-child { font-weight: 600; }
+  .badge { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; color: #fff; white-space: nowrap; }
+  .badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .badge.working { background: var(--working); }
+  .badge.waiting_for_input { background: var(--waiting); }
+  .badge.rate_limited { background: var(--rate); }
+  .badge.stuck { background: var(--stuck); }
+  .badge.crashed { background: var(--crashed); }
+  .badge.done { background: var(--done); }
+  .badge.status { background: #e9edf2; color: var(--text); }
+  .tk { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid; }
+  .tk.auto { color: var(--auto); border-color: var(--auto); background: #f2f4f6; }
+  .tk.human_owned { color: #fff; background: var(--human); border-color: var(--human); }
+  .tk.pausing, .tk.releasing { color: #fff; background: var(--waiting); border-color: var(--waiting); }
+  .muted { color: var(--muted); }
+  .stuckpanel { margin-top: 6px; padding: 8px 10px; background: #fff4ec; border: 1px solid #f3c69f; border-radius: 4px; font-size: 12.5px; }
+  .stuckpanel .tier { font-weight: 700; color: var(--stuck); }
+  .stuckpanel .nudge { margin-top: 4px; }
+  .stuckpanel .nudge b { color: var(--rate); }
+  time { border-bottom: 1px dotted var(--muted); cursor: help; }
+</style>
+</head>
+<body>
+<div class="banner">MOCKUP — sample data only, per PRODUCT.md §11.1. Nothing here is wired to a real daemon.</div>
+<header class="top">
+  <h1>agentcrew — Board</h1>
+  <nav class="pages">
+    <a href="board.html">Board</a>
+    <a href="session.html">Session</a>
+    <a href="forensics.html">Forensics</a>
+  </nav>
+</header>
+<main>
+  <table id="board"></table>
+</main>
+
+<script src="sample-events.js"></script>
+<script>
+'use strict';
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function timeAgo(iso) {
+  const ms = Date.now() - Date.parse(iso);
+  const s = Math.floor(ms / 1000);
+  if (s < 60) return 'just now';
+  const m = Math.floor(s / 60);
+  if (m < 60) return m + 'm ago';
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + 'h ago';
+  return Math.floor(h / 24) + 'd ago';
+}
+
+function relTime(iso) {
+  return `<time datetime="${iso}" title="${iso}">${timeAgo(iso)}</time>`;
+}
+
+// PRODUCT.md §6.1: the six health states, each rendered distinctly by both
+// color and label so the badge does not rely on color alone.
+const HEALTH_LABEL = {
+  working: 'Working', waiting_for_input: 'Waiting for input', rate_limited: 'Rate limited',
+  stuck: 'Stuck', crashed: 'Crashed', done: 'Done',
+};
+
+function healthBadge(h) {
+  return `<span class="badge ${h}">${HEALTH_LABEL[h] || h}</span>`;
+}
+
+// PRODUCT.md §7.1: the four takeover states, shown as a persistent state
+// indicator rather than a button.
+const TAKEOVER_LABEL = { auto: 'Auto', pausing: 'Pausing…', human_owned: 'Human owned', releasing: 'Releasing…' };
+
+function takeoverBadge(t) {
+  return `<span class="tk ${t}">${TAKEOVER_LABEL[t] || t}</span>`;
+}
+
+// PRODUCT.md §11.1: board status is coarse and derived from health, never a
+// second source of truth — a stuck or crashed session is exactly what the
+// board's own "Needs Attention" status exists for.
+function boardStatus(health) {
+  if (health === 'done') return 'Done';
+  if (health === 'crashed' || health === 'stuck') return 'Needs Attention';
+  return 'In Progress';
+}
+
+function lastActivity(events, sessionId) {
+  const own = events.filter(e => e.session_id === sessionId);
+  return own.reduce((max, e) => (e.ts > max ? e.ts : max), own[0].ts);
+}
+
+// The evidence and proposed nudge for a currently-stuck row, per §11.1
+// ("stuck rows: why it was flagged, the tier, and the proposed nudge") and
+// §6.2 (every verdict is a health.changed carrying tier and evidence).
+function stuckEvidence(events, sessionId) {
+  const own = events.filter(e => e.session_id === sessionId).sort((a, b) => a.seq - b.seq);
+  const change = [...own].reverse().find(e => e.type === 'health.changed' && e.payload.to === 'stuck');
+  if (!change) return null;
+  const nudge = own.find(e => e.type === 'nudge.sent' && e.seq >= change.seq);
+  return { tier: change.payload.tier, evidence: change.payload.evidence, nudge: nudge ? nudge.payload.text : null };
+}
+
+function render() {
+  const { tasks, sessions, events } = SAMPLE_EVENTS;
+  const rows = sessions.map(s => {
+    const title = tasks[s.task_id] || s.task_id;
+    const stuck = s.health === 'stuck' ? stuckEvidence(events, s.id) : null;
+    const stuckHtml = stuck ? `
+      <div class="stuckpanel">
+        <div><span class="tier">Tier ${stuck.tier}</span> — ${escapeHtml(JSON.stringify(stuck.evidence))}</div>
+        ${stuck.nudge ? `<div class="nudge"><b>Proposed nudge:</b> ${escapeHtml(stuck.nudge)}</div>` : '<div class="nudge muted">No nudge sent yet.</div>'}
+      </div>` : '';
+    return `
+      <tr class="row" data-session="${s.id}">
+        <td>${escapeHtml(title)}<div class="muted">${s.task_id}</div>${stuckHtml}</td>
+        <td><span class="badge status">${boardStatus(s.health)}</span></td>
+        <td>${healthBadge(s.health)}</td>
+        <td>${takeoverBadge(s.takeover)}</td>
+        <td>${relTime(lastActivity(events, s.id))}</td>
+      </tr>`;
+  }).join('');
+
+  document.getElementById('board').innerHTML = `
+    <thead><tr>
+      <th>Task</th><th>Board status</th><th>Health</th><th>Takeover</th><th>Last activity</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>`;
+
+  document.querySelectorAll('tr.row').forEach(tr => {
+    tr.addEventListener('click', () => {
+      location.href = 'session.html?session=' + encodeURIComponent(tr.dataset.session);
+    });
+  });
+}
+
+render();
+</script>
+</body>
+</html>

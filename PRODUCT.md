@@ -644,7 +644,7 @@ src/adapters/     claude.js  agy.js  gemini.js  mock.js
 src/runtime/      local.js
 src/supervisor/   session.js  health.js  takeover.js  store.js  blobs.js  hooks.js
 src/ui/           server.js  public/
-mockups/          board.html  session.html  forensics.html  sample-events.json
+mockups/          board.html  session.html  forensics.html  sample-events.js
 test/             per §12.2
 ```
 

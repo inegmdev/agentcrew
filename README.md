@@ -36,6 +36,11 @@ decision, and note.
 
 No database. No server. No account.
 
+The supervisor now being designed adds a local event store outside your repo,
+which does not change that rule: intent stays as markdown you own, and the
+store holds transcripts and process history. See
+[Where this is going](#where-this-is-going).
+
 ## Prerequisites
 
 - git, Node.js ≥ 18, npm
@@ -198,14 +203,54 @@ on" will eventually disagree, and then neither can be trusted.
   every onboarded repo's agent instructions, so your agent can do it on
   request; nothing archives on a timer.
 
+## Where this is going
+
+agentcrew is growing from an installer into a **supervisor**: it will own agent
+sessions rather than firing them and hoping. The requirement that drives it is
+human takeover — you watch the board, see an agent stuck, and take the wheel
+mid-task. You cannot do that with a session another program owns.
+
+```text
+backlog/tasks/*.md   ──intent──>  supervised session  ──runs──>  result
+  (record, in git)                (claude · agy · gemini)
+        ^                                                   │
+        └──────────── coarse status written back ───────────┘
+                        single writer, one way
+```
+
+What that means in practice:
+
+| Piece | Shape |
+|---|---|
+| Adapters | one per CLI, normalising into agentcrew's own event schema |
+| Runtimes | local first; git worktree, docker and ssh are the same seam later |
+| Health | hook pushes, then deterministic signals, then an LLM watchdog, with a wall clock underneath |
+| Takeover | a state machine, enforced by denying the agent's tool calls while a human holds it |
+| Archive | every conversation and process, with what started it and what ended it |
+
+Two rules it will not bend. **No vendor credential is ever handled, forwarded
+or proxied** — the official binaries authenticate themselves, and nothing is
+exposed on a port. And **no vendor credentials in CI**: tests run against
+mocked CLIs and recorded fixtures, so the suite works on a fork with no secrets
+configured.
+
+The reasoning, including what was rejected and why, is in
+[`backlog/decisions/`](backlog/decisions/). Start at `decision-3`.
+
 ## Status
 
 The board, memory layer, and daemon all work and are verified against real
-installs. Not yet built: **worktree isolation and agent launching** — moving
-a task to `In Progress` is journalled but does not yet spin up a worktree and
-start an agent in it.
+installs. The supervisor above is **designed, not built** — it sits on the
+board as `task-1` through `task-9`, gated on a protocol spike, because one
+mechanism it depends on is undocumented for the raw CLI.
+
+Not yet built: worktree isolation and agent launching. Moving a task to
+`In Progress` is journalled but does not yet spin up a worktree and start an
+agent in it.
 
 Only Claude Code's headless flag (`-p`) has been verified first-hand; the
 other agents' flags are best-effort defaults and are marked as unverified in
-`src/daemon/agents.js`. See `docs/memory/MEMORY.md` for the full
+`src/daemon/agents.js`. Gemini CLI is kept deliberately for locked-down
+corporate machines even though Google retired it for the consumer tiers, and
+ships marked unverified. See `docs/memory/MEMORY.md` for the full
 verified/unverified split.

@@ -1,5 +1,62 @@
 # Changelog
 
+## Unreleased
+
+Architecture only. No runtime code changed; this is the design record for the
+turn from installer to supervisor, plus the board it will be built on.
+
+**Added**
+- `PRODUCT.md`, the normative specification: use cases, event model, health
+  tiers, takeover protocol, storage layout, adapter and runtime interfaces, UI
+  surfaces, testing contract, and the constraints that do not bend. Every task
+  on the board cites it by section, so an agent picking one up has the
+  decisions already made. Where it and a decision record disagree, the decision
+  wins and the spec is wrong.
+- agentcrew now dogfoods its own board. `backlog init --integration-mode none`
+  writes `backlog/config.yml` and nothing else, so the repo gets a board and
+  a decisions directory without a second set of agent instruction files.
+- `decision-3` — **agentcrew is the orchestrator.** A session supervisor over
+  CLI adapters. Human takeover of a running session is the forcing
+  requirement: you cannot hand a person a session another program owns.
+  Covers the adapter/runtime split, the four-tier health ladder, the takeover
+  state machine, and forensics fields that ship as schema in phase one because
+  causality cannot be backfilled.
+- `decision-4` — **intent versus events.** Tasks, decisions and memory stay as
+  markdown in the repo. Transcripts, process rows and heartbeats go to a
+  per-project SQLite store under `~/.agentcrew/`, never inside the project,
+  because `git clean -xdf` deletes it. Project identity is a UUID inside
+  `.git/`, which survives a clean and a move, stays distinct per clone, and is
+  never committed.
+- `decision-5` — **interrupts are in-band first.** Signals do not port: POSIX
+  has SIGINT to end a turn and SIGTERM to kill, while Node on Windows ignores
+  the signal and force-kills. So the portable path is an in-band interrupt
+  with feature detection, a `PreToolUse` deny as the soft freeze, and a per-OS
+  hard kill isolated in the runtime layer.
+- `decision-6` — **mocked CLIs, no vendor credentials in CI.** Fake binaries
+  and recorded fixtures drive everything; drift detection moves to a
+  maintainer's machine as a fixture refresh. Gemini CLI is kept as a mocked
+  adapter for locked-down corporate machines, shipped unverified.
+- The `Supervisor v1` milestone, `task-1` through `task-10`. Two entry points
+  run in parallel: `task-10`, a clickable mockup driven by a hand-written
+  sample event stream, and `task-1`, a protocol spike against real `claude`
+  and `agy` builds. The mockup comes before the schema deliberately, so the
+  screens and the event shape are designed against each other rather than the
+  screens being fitted to whatever the schema turned out to be.
+
+**Changed**
+- `decision-1` marked **superseded**. Adopting Hermes Agent as the orchestrator
+  was the right instinct about not rebuilding a tested scheduler, and the wrong
+  conclusion once takeover became a requirement. The rejection of the
+  `hermes_cli.kanban_db` monkey patch stands on its original grounds.
+- `decision-2` revised and accepted. The earlier version hedged that any
+  subprocess wrapper would be single-user by construction. There is now no
+  listener at all, so account sharing is designed out rather than warned about.
+- MEMORY.md decision 4 corrected: the constraint on a corporate machine is
+  **which agent CLI is permitted and present**, not install rights. Nothing in
+  the stack needs admin.
+- Short-term memory archived per its own policy: the August and 2026-09-12
+  sections moved into `docs/memory/archived/` and linked from the index.
+
 ## 0.5.0
 
 Restructured the memory layer around one directory and made cleanup a defined

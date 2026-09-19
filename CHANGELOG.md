@@ -6,6 +6,12 @@ Architecture only. No runtime code changed; this is the design record for the
 turn from installer to supervisor, plus the board it will be built on.
 
 **Added**
+- `PRODUCT.md`, the normative specification: use cases, event model, health
+  tiers, takeover protocol, storage layout, adapter and runtime interfaces, UI
+  surfaces, testing contract, and the constraints that do not bend. Every task
+  on the board cites it by section, so an agent picking one up has the
+  decisions already made. Where it and a decision record disagree, the decision
+  wins and the spec is wrong.
 - agentcrew now dogfoods its own board. `backlog init --integration-mode none`
   writes `backlog/config.yml` and nothing else, so the repo gets a board and
   a decisions directory without a second set of agent instruction files.

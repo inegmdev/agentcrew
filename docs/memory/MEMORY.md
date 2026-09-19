@@ -74,8 +74,10 @@ you lose a TUI and keep every task.
    index. Git would keep deleted logs, but nothing would ever look there.
    Enforcement is markdown policy in `templates/AGENTS.snippet.md`, per
    decision 4.
-8. **agentcrew dogfoods its own board.** ADRs live in `backlog/decisions/`.
-   Read them, don't re-derive them.
+8. **`PRODUCT.md` is the normative spec; `backlog/decisions/` holds the
+   reasoning.** The spec says what to build, the ADRs say why and what was
+   rejected. Tasks cite the spec by section. If the two disagree, the ADR wins
+   and the spec is wrong. Read both, don't re-derive them.
 
 | ADR | Says |
 |---|---|
@@ -168,6 +170,7 @@ deleted.
 
 | Path | Role |
 |---|---|
+| `PRODUCT.md` | the normative spec; tasks cite it by section |
 | `backlog/decisions/` | agentcrew's own ADRs; the repo dogfoods its board |
 | `backlog/tasks/` | agentcrew's own board; `Supervisor v1` is task-1..10 |
 | `bin/wizard.js` | CLI entry: `setup <path>`, `update`, `daemon` |

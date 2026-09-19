@@ -311,7 +311,10 @@ exposed on a port. And **no vendor credentials in CI**: tests run against
 mocked CLIs and recorded fixtures, so the suite works on a fork with no secrets
 configured.
 
-The reasoning, including what was rejected and why, is in
+The full specification, including the event model, the health tiers, the
+takeover protocol and the storage layout, is in [`PRODUCT.md`](PRODUCT.md).
+It is normative: every task on the board cites it by section. The reasoning
+behind it, including what was rejected and why, is in
 [`backlog/decisions/`](backlog/decisions/). Start at `decision-3`.
 
 ## Status

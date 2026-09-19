@@ -2,7 +2,7 @@
 id: decision-2
 title: Never proxy subscription credentials; delegate to the official CLI binaries
 date: '2026-09-12 12:57'
-status: proposed
+status: accepted
 ---
 ## Context
 
@@ -51,16 +51,16 @@ agentcrew never handles, extracts, forwards or proxies a vendor credential.
 - Do not install, bundle or configure cli-proxy-api or any equivalent.
 - Detect the installed CLIs, report auth status, and guide the user through
   each vendor's own login flow. Nothing beyond that.
-- Wire Hermes to those CLIs as **delegation targets** using the bundled
-  `skills/autonomous-ai-agents/*` skills, which hand over a whole coding task
-  in a repo. This is the sanctioned shape and it captures the economics,
-  because the expensive calls are the coding ones.
-- Hermes's own planning and cron brain needs real function calling, so it
-  takes an API key or a local model. That cost is accepted, not engineered
-  around.
-- If a subprocess wrapper is ever built, it is single-user and local by
-  construction. agentcrew will not document, expose or make its endpoint
-  shareable.
+- Drive the official binaries as subprocesses over their own stdio, so the
+  credential never leaves the client it belongs to. Settled in decision-3.
+- **No endpoint is exposed at all.** The earlier plan wrapped a CLI as an
+  OpenAI-compatible server; decision-3 removed the need for it. With no
+  listener there is nothing to share, so the account-sharing risk is designed
+  out rather than warned about.
+- agentcrew's own supervisory reasoning, such as the LLM watchdog, needs real
+  function calling, so it takes an API key or a local model. That cost is
+  accepted, not engineered around.
+- CI uses no vendor credentials whatsoever, see decision-6.
 
 ## Consequences
 

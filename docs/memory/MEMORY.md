@@ -55,9 +55,13 @@ abandoned, you lose a TUI and keep every task.
    tasks and docs.
 4. **Agent-agnostic is a hard requirement, not a preference.** The maintainer
    uses Claude + Kimi personally and *only* Gemini on a corporate machine.
-   Anything that hardcodes one agent, or needs install rights a corporate
-   machine won't grant, is disqualified. This is why enforcement lives in
-   markdown instructions rather than Claude Code hooks.
+   Anything that hardcodes one agent is disqualified. This is why enforcement
+   lives in markdown instructions rather than Claude Code hooks.
+   *Corrected 2026-09-19 (decision-3):* the constraint is **which CLI is
+   permitted and present**, not install rights. Nothing in the stack needs
+   admin — `npm config set prefix ~/.local` covers the global install. The real
+   blockers on a locked-down machine are no Node, a TLS-intercepting proxy,
+   account policy, endpoint protection killing daemons, and port binding.
 5. **Validate before designing.** The previous iteration designed an entire
    wizard around Vibe Kanban and guild without ever running either. Backlog.md
    was spiked against a real install *before* any code was written against it
@@ -74,13 +78,21 @@ abandoned, you lose a TUI and keep every task.
    would ever look there; a linked archive stays reachable. Enforcement is the
    markdown policy in `templates/AGENTS.snippet.md` — no CLI command, per
    decision 4 (agent-agnostic, no install rights needed).
-8. **Orchestration and credentials are settled in `backlog/decisions/`.**
-   agentcrew now runs its own board, so ADRs live where the tool indexes them.
-   `decision-1` adopts Hermes Agent as the orchestrator in place of the
-   daemon's scheduling ambitions, with markdown kept as the record by fixing
-   the direction of flow. `decision-2` forbids proxying vendor credentials and
-   routes subscription economics through delegation to the official CLIs
-   instead. Both are `proposed`.
+8. **agentcrew dogfoods its own board**, so ADRs live in
+   `backlog/decisions/` where the tool indexes them. Read them, don't
+   re-derive them:
+   `decision-1` proposed adopting Hermes as the orchestrator, **superseded**;
+   `decision-2` never proxy vendor credentials, drive the official binaries;
+   `decision-3` agentcrew *is* the orchestrator, a session supervisor over CLI
+   adapters, with human takeover as the forcing requirement;
+   `decision-4` intent in markdown, events in a per-project database outside
+   the repo;
+   `decision-5` interrupts in-band first, signals are a per-OS runtime concern;
+   `decision-6` tests run against mocked CLIs with no vendor credentials in CI.
+9. **agentcrew is becoming a platform, not only an installer.** Deliberate, per
+   decision-3. It supervises agent sessions, watches their health, archives
+   every conversation, and lets a human take the wheel mid-task. The installer
+   remains, but it is no longer the whole product.
 
 ## Verified facts (spiked against backlog.md v1.48.0)
 
@@ -122,11 +134,20 @@ automation, never data.
   Appending to a daily log is safe; consolidation is lossy on purpose. A
   human accepts the drop. This asymmetry is load-bearing, not politeness.
 
+Since decision-3 the daemon grows a second half, the session supervisor, which
+*does* hold state: a per-project SQLite store outside the repo (decision-4).
+The old rule survives in spirit — intent still lives in the repo, so stopping
+the daemon loses automation and event history, never tasks.
+
 ## Not yet done
 
+- **The supervisor slice.** Session ownership, health monitoring, human
+  takeover and conversation archiving are designed (decision-3 through
+  decision-6) and sit on the board as task-1 through task-9. Nothing is built
+  yet. Start with task-1, the spike, before writing supervisor code.
 - **Worktree isolation and agent launching.** Moving a task to `In Progress`
   is journalled but doesn't yet create a worktree and start an agent in it.
-  This is the remaining gap versus the original goal.
+  Now framed as the `worktree` runtime in decision-3's adapter/runtime split.
 - **Nothing is auto-committed.** The daemon writes files; it doesn't commit
   or open PRs. The intended end state is auto-commit for journal appends and
   a PR for MEMORY.md rewrites.
@@ -158,6 +179,7 @@ session linked from the index. Nothing is deleted, and re-running is a no-op.
 | Path | Role |
 |---|---|
 | `backlog/decisions/` | agentcrew's own ADRs; the repo now dogfoods its board |
+| `backlog/tasks/` | agentcrew's own board; the supervisor slice is task-1..9 |
 | `bin/wizard.js` | CLI entry: `setup <path>`, `update` |
 | `src/lib/` | shell helpers, state registry (`~/.agentcrew/state.json`) |
 | `src/steps/` | one file per setup step, run in order by the wizard |

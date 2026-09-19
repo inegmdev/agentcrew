@@ -102,3 +102,12 @@ session another program owns internally. Numbered points as discussed:
   job. No live credentials in CI at all.
 
 Repo state: no tests, no `.github/`, zero dependencies. Use `node:test` and keep it that way.
+
+**Written up:** decision-1 marked superseded; decision-2 revised (no endpoint at
+all, CI credential-free) and accepted; decision-3 (agentcrew is the
+orchestrator), decision-4 (intent vs events, store outside the repo, project id
+in `.git/`), decision-5 (interrupts in-band first), decision-6 (mocked CLIs, no
+credentials in CI) all accepted. Board seeded with task-1..9; task-1 is the
+spike and gates the rest. MEMORY.md decision 4 corrected (permitted CLI, not
+install rights) and decisions 8-9 rewritten to point at the ADRs.
+Gemini kept as a mocked adapter for legacy corporate users, shipped unverified.

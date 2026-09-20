@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>agentcrew — Dependencies (mockup)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --bg: #f4f5f7; --panel: #ffffff; --border: #dfe3e9; --border-soft: #eaedf1;
+    --text: #1a212c; --muted: #626b7a; --accent: #0f8f86; --accent-weak: #e3f4f2;
+    --working: #3b82f6; --waiting: #d97706; --rate: #7c3aed; --stuck: #ea580c; --crashed: #dc2626; --done: #059669;
+    --sans: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1216; --panel: #171b21; --border: #262c35; --border-soft: #1e232b;
+      --text: #e7e9ed; --muted: #8b93a2; --accent: #3fd6cc; --accent-weak: #12302d;
+      --working: #5b9bff; --waiting: #f2a93c; --rate: #a78bfa; --stuck: #fb923c; --crashed: #f87171; --done: #34d399;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1216; --panel: #171b21; --border: #262c35; --border-soft: #1e232b;
+    --text: #e7e9ed; --muted: #8b93a2; --accent: #3fd6cc; --accent-weak: #12302d;
+    --working: #5b9bff; --waiting: #f2a93c; --rate: #a78bfa; --stuck: #fb923c; --crashed: #f87171; --done: #34d399;
+  }
+  * { box-sizing: border-box; }
+  html, body { color-scheme: light dark; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 400 14px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .mockflag { background: var(--accent-weak); color: var(--accent); border-bottom: 1px solid var(--border); padding: 6px 20px; font: 500 11.5px/1.4 var(--sans); }
+  header.top { background: var(--panel); border-bottom: 1px solid var(--border); padding: 14px 20px; display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+  .brand { display: flex; align-items: center; gap: 9px; font: 700 15px/1 var(--sans); letter-spacing: -.01em; }
+  .brand .mark { width: 20px; height: 20px; border-radius: 5px; background: var(--accent); display: grid; place-items: center; color: var(--panel); font: 700 11px var(--sans); }
+  nav.pages { display: flex; gap: 4px; }
+  nav.pages a { color: var(--muted); text-decoration: none; font: 600 12.5px var(--sans); padding: 6px 10px; border-radius: 6px; }
+  nav.pages a:hover { background: var(--border-soft); color: var(--text); }
+  nav.pages a.current { background: var(--accent-weak); color: var(--accent); }
+
+  main { max-width: 1200px; margin: 0 auto; padding: 22px 20px 60px; }
+  .boardhead h1 { font: 700 20px/1.2 var(--sans); margin: 0; letter-spacing: -.01em; }
+  .boardhead p { margin: 3px 0 18px; color: var(--muted); font-size: 13px; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin-bottom: 14px; font-size: 12px; color: var(--muted); }
+  .legend .item { display: flex; align-items: center; gap: 6px; }
+  .legend .swatch { width: 12px; height: 8px; border-radius: 2px; }
+
+  .gantt { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .axis { display: grid; grid-template-columns: 220px 1fr; border-bottom: 1px solid var(--border); }
+  .axis .spacer { padding: 8px 12px; }
+  .axis .ticks { position: relative; height: 30px; }
+  .axis .tick { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--border-soft); font: 400 10.5px var(--mono); color: var(--muted); padding: 6px 0 0 4px; white-space: nowrap; }
+  /* The "now" tick sits at the 100% mark, so its label is anchored by
+     `right`, not `left`+padding, for the same reason as .marker above:
+     text after a left-anchored box at the edge runs straight off it. */
+  .axis .tick-line.now { position: absolute; top: 0; bottom: 0; right: 0; border-left: 1px dashed var(--accent); }
+  .axis .tick-label.now { position: absolute; top: 6px; right: 0; padding-right: 4px; color: var(--accent); font: 600 10.5px var(--mono); white-space: nowrap; }
+
+  .row { display: grid; grid-template-columns: 220px 1fr; border-bottom: 1px solid var(--border-soft); align-items: center; min-height: 52px; }
+  .row:last-child { border-bottom: none; }
+  .row .label { padding: 8px 12px; min-width: 0; }
+  .row .label .title { font: 600 12.5px/1.3 var(--sans); text-wrap: balance; }
+  .row .label .id { font: 400 10.5px var(--mono); color: var(--muted); }
+  .row .track { position: relative; height: 100%; }
+  .gridline { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--border-soft); pointer-events: none; }
+  .gridline.now { right: 0; border-left: 1px dashed var(--accent); opacity: .5; }
+
+  .bar { position: absolute; top: 50%; transform: translateY(-50%); height: 20px; border-radius: 5px; display: flex; align-items: center; padding: 0 8px; font: 600 11px var(--sans); color: #fff; white-space: nowrap; overflow: hidden; min-width: 10px; }
+  .bar.working { background: var(--working); }
+  .bar.waiting_for_input { background: var(--waiting); }
+  .bar.rate_limited { background: var(--rate); }
+  .bar.stuck { background: var(--stuck); }
+  .bar.crashed { background: var(--crashed); }
+  .bar.done { background: var(--done); }
+
+  /* Anchored by `right`, not `left`+transform: an auto-width box pinned to
+     its right edge only ever grows leftward, so the label can never run
+     past the track's own edge — which a centered transform at the 100%
+     mark otherwise does. */
+  .marker { position: absolute; top: 50%; right: 0; transform: translateY(-50%); display: flex; align-items: center; gap: 6px; font: 600 11px var(--sans); white-space: nowrap; }
+  .marker .diamond { width: 12px; height: 12px; border-radius: 3px; transform: rotate(45deg); border: 2px solid var(--muted); background: var(--panel); }
+  .marker.blocked .diamond { border-color: var(--waiting); background: var(--waiting); opacity: .25; }
+  .marker.blocked .marker-label { color: var(--waiting); }
+  .marker.ready .marker-label { color: var(--muted); }
+
+  svg.edges { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+  svg.edges path { fill: none; stroke: var(--muted); stroke-width: 1.5; opacity: .6; }
+  svg.edges path.blocking { stroke: var(--waiting); opacity: .9; }
+  svg.edges circle { fill: var(--muted); }
+  svg.edges circle.blocking { fill: var(--waiting); }
+
+  time { border-bottom: 1px dotted var(--muted); cursor: help; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="mockflag">MOCKUP — sample data only, per PRODUCT.md §11.5. Dependencies come from Backlog.md's own <code>dependencies</code> field, laid against actual session timing.</div>
+<header class="top">
+  <div class="brand"><span class="mark">A</span>agentcrew</div>
+  <nav class="pages">
+    <a href="board.html">Board</a>
+    <a href="session.html">Session</a>
+    <a href="forensics.html">Forensics</a>
+    <a href="dependencies.html" class="current">Dependencies</a>
+  </nav>
+</header>
+<main>
+  <div class="boardhead">
+    <h1>Dependencies</h1>
+    <p>Execution timing from the event store, laid against the dependency graph from the board.</p>
+  </div>
+  <div class="legend" id="legend"></div>
+  <div class="gantt">
+    <div class="axis"><div class="spacer"></div><div class="ticks" id="ticks"></div></div>
+    <div id="rows"></div>
+  </div>
+</main>
+
+<script src="sample-events.js"></script>
+<script>
+'use strict';
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+const HEALTH_LABEL = {
+  working: 'Working', waiting_for_input: 'Waiting for input', rate_limited: 'Rate limited',
+  stuck: 'Stuck', crashed: 'Crashed', done: 'Done',
+};
+
+const { tasks, sessions, events, dependencies } = SAMPLE_EVENTS;
+const now = Date.now();
+const byTask = Object.fromEntries(sessions.map(s => [s.task_id, s]));
+const taskIds = Object.keys(tasks); // authored order: the 2 unclaimed first, then 101..107
+
+// PRODUCT.md §11.5: time domain runs from the earliest session start to now
+// — "now" is also where an unclaimed or still-running task's edge of
+// activity sits, since there is nothing later to show yet.
+const starts = sessions.map(s => Date.parse(s.started_at));
+const domainStart = Math.min(...starts);
+const domainEnd = now;
+const span = domainEnd - domainStart;
+
+function pct(ts) {
+  return Math.max(0, Math.min(100, ((ts - domainStart) / span) * 100));
+}
+
+// A task is blocked when it has no session yet and at least one dependency
+// hasn't reached health "done". This is read straight off the dependency
+// graph and the dependencies' own sessions — nothing here is a supervisor
+// event, per §11.5.
+function isBlocked(taskId) {
+  const deps = dependencies[taskId];
+  if (!deps || !deps.length) return false;
+  return deps.some(d => byTask[d]?.health !== 'done');
+}
+
+// Shared by the axis and the row gridlines, so the two always agree —
+// nothing here is decorative; every line marks a real hour boundary.
+function computeTicks() {
+  const hours = Math.ceil(span / 3600000);
+  const step = hours <= 6 ? 1 : hours <= 14 ? 2 : 4;
+  const ticks = [];
+  for (let h = 0; h <= hours; h += step) {
+    const ts = domainStart + h * 3600000;
+    ticks.push({ left: pct(ts), label: h === 0 ? '' : `-${hours - h}h` });
+  }
+  return ticks;
+}
+
+function renderTicks(ticks) {
+  document.getElementById('ticks').innerHTML =
+    ticks.map(t => `<div class="tick" style="left:${t.left}%">${t.label}</div>`).join('') +
+    `<div class="tick-line now"></div><div class="tick-label now">now</div>`;
+}
+
+function renderGridlines(ticks) {
+  const rowsEl = document.getElementById('rows');
+  rowsEl.querySelectorAll('.gridline').forEach(el => el.remove());
+  for (const t of ticks) {
+    rowsEl.insertAdjacentHTML('beforeend', `<div class="gridline" style="left:${t.left}%"></div>`);
+  }
+  rowsEl.insertAdjacentHTML('beforeend', `<div class="gridline now"></div>`);
+}
+
+function renderLegend() {
+  const swatches = Object.entries(HEALTH_LABEL).map(([k, v]) =>
+    `<span class="item"><span class="swatch" style="background:var(--${k === 'waiting_for_input' ? 'waiting' : k === 'rate_limited' ? 'rate' : k})"></span>${v}</span>`
+  ).join('');
+  document.getElementById('legend').innerHTML = swatches +
+    `<span class="item"><span class="diamond" style="width:9px;height:9px;border:2px solid var(--muted);border-radius:2px;transform:rotate(45deg);display:inline-block;background:var(--panel)"></span>Ready, unclaimed</span>` +
+    `<span class="item"><span class="diamond" style="width:9px;height:9px;border:2px solid var(--waiting);border-radius:2px;transform:rotate(45deg);display:inline-block;background:var(--waiting);opacity:.5"></span>Blocked on a dependency</span>`;
+}
+
+// Anchor point for drawing an edge: a running/unclaimed task's "current"
+// position is "now", since that's as far as its activity is known.
+function anchor(taskId, side) {
+  const session = byTask[taskId];
+  if (session) {
+    const ts = side === 'end' ? (session.ended_at ? Date.parse(session.ended_at) : now) : Date.parse(session.started_at);
+    return pct(ts);
+  }
+  return 100; // unclaimed: sits at "now"
+}
+
+function renderRows() {
+  const ticks = computeTicks();
+  renderTicks(ticks);
+  const rowsHtml = taskIds.map((taskId, i) => {
+    const title = tasks[taskId];
+    const session = byTask[taskId];
+    let content;
+    if (session) {
+      const left = pct(Date.parse(session.started_at));
+      const right = pct(session.ended_at ? Date.parse(session.ended_at) : now);
+      const width = Math.max(right - left, 1.2);
+      content = `<div class="bar ${session.health}" style="left:${left}%;width:${width}%" title="${session.started_at} → ${session.ended_at || 'still running'}">${HEALTH_LABEL[session.health]}</div>`;
+    } else {
+      const blocked = isBlocked(taskId);
+      content = `<div class="marker ${blocked ? 'blocked' : 'ready'}">
+        <span class="diamond"></span><span class="marker-label">${blocked ? 'Blocked' : 'Ready'}</span>
+      </div>`;
+    }
+    return `
+      <div class="row" data-task="${taskId}">
+        <div class="label"><div class="title">${escapeHtml(title)}</div><div class="id">${taskId}</div></div>
+        <div class="track">${content}</div>
+      </div>`;
+  }).join('');
+  const rowsEl = document.getElementById('rows');
+  rowsEl.style.position = 'relative';
+  rowsEl.innerHTML = rowsHtml;
+  renderGridlines(ticks);
+  drawEdges();
+}
+
+// Dependency edges are drawn after layout, in real pixel space, so the
+// curve always meets the actual bar/marker positions regardless of the
+// row heights the browser settles on.
+function drawEdges() {
+  document.querySelectorAll('svg.edges').forEach(el => el.remove());
+  const rowsEl = document.getElementById('rows');
+  const rowsRect = rowsEl.getBoundingClientRect();
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('class', 'edges');
+  rowsEl.style.position = 'relative';
+  rowsEl.appendChild(svg);
+
+  for (const [downstream, deps] of Object.entries(dependencies)) {
+    const downRow = rowsEl.querySelector(`.row[data-task="${downstream}"]`);
+    if (!downRow) continue;
+    const downRect = downRow.getBoundingClientRect();
+    const downBlocked = isBlocked(downstream);
+    const downX = downRect.left - rowsRect.left + downRect.width * (byTask[downstream] ? anchor(downstream, 'start') / 100 : 0.999);
+    const downY = downRect.top - rowsRect.top + downRect.height / 2;
+
+    for (const upstream of deps) {
+      const upRow = rowsEl.querySelector(`.row[data-task="${upstream}"]`);
+      if (!upRow) continue;
+      const upRect = upRow.getBoundingClientRect();
+      const upDone = byTask[upstream]?.health === 'done';
+      const upX = upRect.left - rowsRect.left + upRect.width * (anchor(upstream, 'end') / 100);
+      const upY = upRect.top - rowsRect.top + upRect.height / 2;
+
+      // Bow the curve leftward, scaled to the vertical gap: when an
+      // upstream task and its dependent both currently sit at "now" (both
+      // still running or unclaimed), a plain midpoint control gives a
+      // straight vertical line that hides against the now-gridline. A
+      // fixed leftward bow keeps every edge visibly a curve.
+      const bow = Math.min(70, Math.max(24, Math.abs(downY - upY) * 0.35));
+      const c1x = upX - bow, c2x = downX - bow;
+      const cls = (!upDone && downBlocked) ? 'blocking' : '';
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', `M ${upX} ${upY} C ${c1x} ${upY}, ${c2x} ${downY}, ${downX} ${downY}`);
+      path.setAttribute('class', cls);
+      svg.appendChild(path);
+
+      const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      dot.setAttribute('cx', upX); dot.setAttribute('cy', upY); dot.setAttribute('r', 2.5);
+      dot.setAttribute('class', cls);
+      svg.appendChild(dot);
+    }
+  }
+}
+
+renderLegend();
+renderRows();
+window.addEventListener('resize', drawEdges);
+</script>
+</body>
+</html>

@@ -578,6 +578,23 @@ built, so the event model is designed against real screens.
 - Never render raw blob content inline. Show the preview and a link.
 - A page opened from `file://` cannot `fetch` a sibling JSON file; browsers block it. Sample data for the mockups is therefore a **JavaScript** file assigning `globalThis.SAMPLE_EVENTS`, loaded with a plain `<script src>`. This keeps "no build step" literally true.
 
+### 11.5 Dependencies (Gantt)
+
+Task-to-task dependencies are not a supervisor concept — they are Backlog.md's
+own `dependencies` field on a task, the same one this repo's own board uses
+via `backlog task edit --depends-on`. This screen reads that intent-side graph
+and lays it against actual event-sourced execution timing, which is exactly
+what decision-4's intent/events split exists to make possible: one screen
+answering "what's blocked, and by how much."
+
+| Must show | Notes |
+|---|---|
+| one row per task | a horizontal bar spanning session start → end, or start → now while still running |
+| bar color | the session's health, same palette as the board |
+| a task with no session yet | a marker, not a bar — there is no execution timing to show |
+| dependency edges | a line from an upstream task's end to a downstream task's start |
+| a downstream task blocked on an incomplete dependency | visually distinct from one whose dependencies are all done, even before it has a session |
+
 ---
 
 ## 12. Testing and CI
@@ -644,7 +661,7 @@ src/adapters/     claude.js  agy.js  gemini.js  mock.js
 src/runtime/      local.js
 src/supervisor/   session.js  health.js  takeover.js  store.js  blobs.js  hooks.js
 src/ui/           server.js  public/
-mockups/          board.html  session.html  forensics.html  sample-events.js
+mockups/          board.html  session.html  forensics.html  dependencies.html  sample-events.js
 test/             per §12.2
 ```
 

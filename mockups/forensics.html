@@ -4,46 +4,68 @@
 <meta charset="utf-8">
 <title>agentcrew — Forensics (mockup)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
   :root {
-    --bg: #f6f7f9; --panel: #ffffff; --border: #dde1e6; --text: #1c2430; --muted: #5b6675;
-    --working: #2b6cb0; --waiting: #b7791f; --rate: #6b46c1; --stuck: #c2410c; --crashed: #c53030; --done: #2f855a;
+    --bg: #f4f5f7; --panel: #ffffff; --border: #dfe3e9; --border-soft: #eaedf1;
+    --text: #1a212c; --muted: #626b7a; --accent: #0f8f86; --accent-weak: #e3f4f2;
+    --working: #3b82f6; --waiting: #d97706; --rate: #7c3aed; --stuck: #ea580c; --crashed: #dc2626; --done: #059669;
+    --sans: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1216; --panel: #171b21; --border: #262c35; --border-soft: #1e232b;
+      --text: #e7e9ed; --muted: #8b93a2; --accent: #3fd6cc; --accent-weak: #12302d;
+      --working: #5b9bff; --waiting: #f2a93c; --rate: #a78bfa; --stuck: #fb923c; --crashed: #f87171; --done: #34d399;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1216; --panel: #171b21; --border: #262c35; --border-soft: #1e232b;
+    --text: #e7e9ed; --muted: #8b93a2; --accent: #3fd6cc; --accent-weak: #12302d;
+    --working: #5b9bff; --waiting: #f2a93c; --rate: #a78bfa; --stuck: #fb923c; --crashed: #f87171; --done: #34d399;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif; }
-  header.top { background: var(--panel); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
-  header.top h1 { font-size: 16px; margin: 0; }
-  nav.pages a { color: var(--working); text-decoration: none; margin-right: 14px; font-size: 13px; }
-  nav.pages a:hover { text-decoration: underline; }
-  .banner { background: #fff8e1; border-bottom: 1px solid #f0d98c; color: #6b5300; padding: 6px 24px; font-size: 12px; }
-  select { font: inherit; padding: 4px 6px; }
-  main { max-width: 1040px; margin: 24px auto; padding: 0 24px; display: grid; gap: 16px; }
-  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 16px; }
-  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 10px; }
+  html, body { color-scheme: light dark; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 400 14px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .mockflag { background: var(--accent-weak); color: var(--accent); border-bottom: 1px solid var(--border); padding: 6px 20px; font: 500 11.5px/1.4 var(--sans); }
+  header.top { background: var(--panel); border-bottom: 1px solid var(--border); padding: 14px 20px; display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+  .brand { display: flex; align-items: center; gap: 9px; font: 700 15px/1 var(--sans); letter-spacing: -.01em; }
+  .brand .mark { width: 20px; height: 20px; border-radius: 5px; background: var(--accent); display: grid; place-items: center; color: var(--panel); font: 700 11px var(--sans); }
+  nav.pages { display: flex; gap: 4px; }
+  nav.pages a { color: var(--muted); text-decoration: none; font: 600 12.5px var(--sans); padding: 6px 10px; border-radius: 6px; }
+  nav.pages a:hover { background: var(--border-soft); color: var(--text); }
+  nav.pages a.current { background: var(--accent-weak); color: var(--accent); }
+  select { font: 400 13px var(--sans); padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--panel); color: var(--text); }
+  main { max-width: 1040px; margin: 22px auto 60px; padding: 0 20px; display: grid; gap: 14px; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  h2 { font: 600 12px var(--sans); text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0 0 12px; }
   table { width: 100%; border-collapse: collapse; }
-  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); font-size: 13px; vertical-align: top; }
-  th { color: var(--muted); font-weight: 600; font-size: 11.5px; text-transform: uppercase; }
-  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
-  pre { background: #f2f4f6; border: 1px solid var(--border); border-radius: 6px; padding: 10px; overflow-x: auto; white-space: pre-wrap; }
+  th, td { text-align: left; padding: 7px 9px; border-bottom: 1px solid var(--border-soft); font-size: 13px; vertical-align: top; }
+  th { color: var(--muted); font: 600 11px var(--sans); text-transform: uppercase; letter-spacing: .03em; }
+  code, pre { font-family: var(--mono); font-size: 12px; }
+  pre { background: var(--border-soft); border: 1px solid var(--border); border-radius: 8px; padding: 10px; overflow-x: auto; white-space: pre-wrap; margin: 0; }
   .chain { display: grid; gap: 4px; }
-  .hop { display: grid; grid-template-columns: 90px 160px 1fr; gap: 10px; align-items: baseline; padding: 6px 8px; border-radius: 4px; }
-  .hop.target { background: #eef4ff; border: 1px solid #c8dbfa; }
-  .hop .seq { color: var(--muted); font-family: ui-monospace, monospace; }
-  .hop .type { font-weight: 600; }
-  .hop .actor { color: var(--muted); font-size: 12px; }
-  .arrow { text-align: center; color: var(--muted); font-size: 11px; }
-  time { border-bottom: 1px dotted var(--muted); cursor: help; }
+  .hop { display: grid; grid-template-columns: 60px 190px 1fr; gap: 10px; align-items: baseline; padding: 7px 9px; border-radius: 6px; }
+  .hop.target { background: var(--accent-weak); border: 1px solid var(--accent); }
+  .hop .seq { color: var(--muted); font-family: var(--mono); }
+  .hop .type { font: 600 13px var(--sans); }
+  .hop .actor { color: var(--muted); font-size: 11.5px; }
+  .arrow { text-align: center; color: var(--muted); font-size: 10.5px; font-family: var(--mono); }
+  time { border-bottom: 1px dotted var(--muted); cursor: help; text-decoration: none; }
   .running { color: var(--working); font-weight: 600; }
 </style>
 </head>
 <body>
-<div class="banner">MOCKUP — sample data only, per PRODUCT.md §11.3.</div>
+<div class="mockflag">MOCKUP — sample data only, per PRODUCT.md §11.3.</div>
 <header class="top">
-  <h1>agentcrew — Forensics</h1>
+  <div class="brand"><span class="mark">A</span>agentcrew</div>
   <nav class="pages">
     <a href="board.html">Board</a>
     <a href="session.html">Session</a>
-    <a href="forensics.html">Forensics</a>
+    <a href="forensics.html" class="current">Forensics</a>
   </nav>
   <select id="picker"></select>
 </header>

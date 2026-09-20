@@ -4,58 +4,111 @@
 <meta charset="utf-8">
 <title>agentcrew — Board (mockup)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
+  /* --- Tokens: light (bare :root), then dark overrides --- */
   :root {
-    --bg: #f6f7f9; --panel: #ffffff; --border: #dde1e6; --text: #1c2430; --muted: #5b6675;
-    --working: #2b6cb0; --waiting: #b7791f; --rate: #6b46c1; --stuck: #c2410c; --crashed: #c53030; --done: #2f855a;
-    --auto: #7b8794; --human: #2b6cb0;
+    --bg: #f4f5f7; --panel: #ffffff; --border: #dfe3e9; --border-soft: #eaedf1;
+    --text: #1a212c; --muted: #626b7a; --accent: #0f8f86; --accent-weak: #e3f4f2;
+    --working: #3b82f6; --waiting: #d97706; --rate: #7c3aed; --stuck: #ea580c; --crashed: #dc2626; --done: #059669;
+    --working-weak: #e8f0fe; --waiting-weak: #fdf1e0; --rate-weak: #f1eafe; --stuck-weak: #fdece0; --crashed-weak: #fbe6e6; --done-weak: #e2f5ec;
+    --shadow: 0 1px 2px rgba(20, 24, 32, .05), 0 1px 1px rgba(20, 24, 32, .04);
+    --sans: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1216; --panel: #171b21; --border: #262c35; --border-soft: #1e232b;
+      --text: #e7e9ed; --muted: #8b93a2; --accent: #3fd6cc; --accent-weak: #12302d;
+      --working: #5b9bff; --waiting: #f2a93c; --rate: #a78bfa; --stuck: #fb923c; --crashed: #f87171; --done: #34d399;
+      --working-weak: #16233d; --waiting-weak: #332612; --rate-weak: #241f3d; --stuck-weak: #33230f; --crashed-weak: #3a1b1b; --done-weak: #123527;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 1px 1px rgba(0, 0, 0, .3);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1216; --panel: #171b21; --border: #262c35; --border-soft: #1e232b;
+    --text: #e7e9ed; --muted: #8b93a2; --accent: #3fd6cc; --accent-weak: #12302d;
+    --working: #5b9bff; --waiting: #f2a93c; --rate: #a78bfa; --stuck: #fb923c; --crashed: #f87171; --done: #34d399;
+    --working-weak: #16233d; --waiting-weak: #332612; --rate-weak: #241f3d; --stuck-weak: #33230f; --crashed-weak: #3a1b1b; --done-weak: #123527;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 1px 1px rgba(0, 0, 0, .3);
+  }
+
   * { box-sizing: border-box; }
-  body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font: 14px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif; }
-  header.top { background: var(--panel); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; gap: 18px; }
-  header.top h1 { font-size: 16px; margin: 0; }
-  nav.pages a { color: var(--working); text-decoration: none; margin-right: 14px; font-size: 13px; }
-  nav.pages a:hover { text-decoration: underline; }
-  .banner { background: #fff8e1; border-bottom: 1px solid #f0d98c; color: #6b5300; padding: 6px 24px; font-size: 12px; }
-  main { max-width: 1200px; margin: 24px auto; padding: 0 24px; }
-  table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
-  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
-  th { background: #eef1f4; font-size: 12px; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); }
-  tr.row:hover { background: #f4f7fb; cursor: pointer; }
-  tr.row td:first-child { font-weight: 600; }
-  .badge { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; color: #fff; white-space: nowrap; }
-  .badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-  .badge.working { background: var(--working); }
-  .badge.waiting_for_input { background: var(--waiting); }
-  .badge.rate_limited { background: var(--rate); }
-  .badge.stuck { background: var(--stuck); }
-  .badge.crashed { background: var(--crashed); }
-  .badge.done { background: var(--done); }
-  .badge.status { background: #e9edf2; color: var(--text); }
-  .tk { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid; }
-  .tk.auto { color: var(--auto); border-color: var(--auto); background: #f2f4f6; }
-  .tk.human_owned { color: #fff; background: var(--human); border-color: var(--human); }
-  .tk.pausing, .tk.releasing { color: #fff; background: var(--waiting); border-color: var(--waiting); }
-  .muted { color: var(--muted); }
-  .stuckpanel { margin-top: 6px; padding: 8px 10px; background: #fff4ec; border: 1px solid #f3c69f; border-radius: 4px; font-size: 12.5px; }
-  .stuckpanel .tier { font-weight: 700; color: var(--stuck); }
-  .stuckpanel .nudge { margin-top: 4px; }
+  html, body { color-scheme: light dark; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 400 14px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .mockflag { background: var(--accent-weak); color: var(--accent); border-bottom: 1px solid var(--border); padding: 6px 20px; font: 500 11.5px/1.4 var(--sans); letter-spacing: .02em; }
+  .mockflag a { color: inherit; }
+
+  header.top { background: var(--panel); border-bottom: 1px solid var(--border); padding: 14px 20px; display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+  .brand { display: flex; align-items: center; gap: 9px; font: 700 15px/1 var(--sans); letter-spacing: -.01em; }
+  .brand .mark { width: 20px; height: 20px; border-radius: 5px; background: var(--accent); display: grid; place-items: center; color: var(--panel); font: 700 11px var(--sans); }
+  nav.pages { display: flex; gap: 4px; margin-left: 4px; }
+  nav.pages a { color: var(--muted); text-decoration: none; font: 600 12.5px var(--sans); padding: 6px 10px; border-radius: 6px; }
+  nav.pages a:hover { background: var(--border-soft); color: var(--text); }
+  nav.pages a.current { background: var(--accent-weak); color: var(--accent); }
+
+  main { max-width: 1320px; margin: 0 auto; padding: 22px 20px 60px; }
+  .boardhead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+  .boardhead h1 { font: 700 20px/1.2 var(--sans); margin: 0; letter-spacing: -.01em; }
+  .boardhead p { margin: 3px 0 0; color: var(--muted); font-size: 13px; }
+
+  .board { display: grid; grid-template-columns: repeat(auto-fit, minmax(255px, 1fr)); gap: 16px; align-items: start; }
+  .column { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .colhead { display: flex; align-items: center; justify-content: space-between; padding: 2px 4px; }
+  .colhead .name { font: 600 12px var(--sans); text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  .colhead .count { font: 600 11px var(--mono); color: var(--muted); background: var(--border-soft); border-radius: 999px; padding: 1px 7px; }
+  .cards { display: flex; flex-direction: column; gap: 10px; }
+
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 13px; box-shadow: var(--shadow); cursor: pointer; transition: border-color .12s, transform .12s; }
+  .card:hover { border-color: var(--accent); }
+  .card:active { transform: translateY(1px); }
+  .card .title { font: 600 13.5px/1.35 var(--sans); margin: 0 0 4px; text-wrap: balance; }
+  .card .idrow { font: 400 11px var(--mono); color: var(--muted); margin-bottom: 9px; }
+  .card .chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .card .foot { display: flex; align-items: center; justify-content: space-between; margin-top: 9px; font: 400 11px var(--mono); color: var(--muted); }
+  .card.unclaimed { opacity: .82; }
+  .card.unclaimed .idrow::after { content: "not started"; margin-left: 6px; }
+
+  .chip { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px 2px 6px; border-radius: 999px; font: 600 11px var(--sans); white-space: nowrap; }
+  .chip .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+  .chip.health-working { background: var(--working-weak); color: var(--working); }
+  .chip.health-waiting_for_input { background: var(--waiting-weak); color: var(--waiting); }
+  .chip.health-rate_limited { background: var(--rate-weak); color: var(--rate); }
+  .chip.health-stuck { background: var(--stuck-weak); color: var(--stuck); }
+  .chip.health-crashed { background: var(--crashed-weak); color: var(--crashed); }
+  .chip.health-done { background: var(--done-weak); color: var(--done); }
+  .chip.tk-human_owned { background: var(--accent-weak); color: var(--accent); }
+  .chip.tk-pausing, .chip.tk-releasing { background: var(--waiting-weak); color: var(--waiting); }
+
+  .stuckpanel { margin-top: 9px; padding: 9px 10px; background: var(--stuck-weak); border: 1px solid var(--stuck); border-radius: 7px; font-size: 12px; }
+  .stuckpanel .head { display: flex; align-items: center; gap: 6px; font: 600 11px var(--sans); color: var(--stuck); text-transform: uppercase; letter-spacing: .03em; margin-bottom: 5px; }
+  .stuckpanel code { font: 400 11px var(--mono); background: rgba(0,0,0,.06); border-radius: 4px; padding: 1px 4px; display: block; margin-bottom: 6px; word-break: break-word; }
   .stuckpanel .nudge b { color: var(--rate); }
-  time { border-bottom: 1px dotted var(--muted); cursor: help; }
+
+  time { border-bottom: 1px dotted var(--muted); cursor: help; text-decoration: none; }
 </style>
 </head>
 <body>
-<div class="banner">MOCKUP — sample data only, per PRODUCT.md §11.1. Nothing here is wired to a real daemon.</div>
+<div class="mockflag">MOCKUP — sample data only, per <a href="https://github.com/inegmdev/agentcrew/blob/main/PRODUCT.md">PRODUCT.md</a> §11.1. Nothing here is wired to a real daemon.</div>
 <header class="top">
-  <h1>agentcrew — Board</h1>
+  <div class="brand"><span class="mark">A</span>agentcrew</div>
   <nav class="pages">
-    <a href="board.html">Board</a>
+    <a href="board.html" class="current">Board</a>
     <a href="session.html">Session</a>
     <a href="forensics.html">Forensics</a>
   </nav>
 </header>
 <main>
-  <table id="board"></table>
+  <div class="boardhead">
+    <div>
+      <h1>Supervisor v1</h1>
+      <p>Seven live sessions across six health states, plus two unclaimed tasks.</p>
+    </div>
+  </div>
+  <div class="board" id="board"></div>
 </main>
 
 <script src="sample-events.js"></script>
@@ -65,10 +118,8 @@
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
-
 function timeAgo(iso) {
-  const ms = Date.now() - Date.parse(iso);
-  const s = Math.floor(ms / 1000);
+  const s = Math.floor((Date.now() - Date.parse(iso)) / 1000);
   if (s < 60) return 'just now';
   const m = Math.floor(s / 60);
   if (m < 60) return m + 'm ago';
@@ -76,47 +127,38 @@ function timeAgo(iso) {
   if (h < 24) return h + 'h ago';
   return Math.floor(h / 24) + 'd ago';
 }
-
 function relTime(iso) {
   return `<time datetime="${iso}" title="${iso}">${timeAgo(iso)}</time>`;
 }
 
-// PRODUCT.md §6.1: the six health states, each rendered distinctly by both
-// color and label so the badge does not rely on color alone.
+// PRODUCT.md §6.1: the six health states, each carrying a color AND a text
+// label, so the chip never depends on color alone.
 const HEALTH_LABEL = {
   working: 'Working', waiting_for_input: 'Waiting for input', rate_limited: 'Rate limited',
   stuck: 'Stuck', crashed: 'Crashed', done: 'Done',
 };
-
-function healthBadge(h) {
-  return `<span class="badge ${h}">${HEALTH_LABEL[h] || h}</span>`;
+function healthChip(h) {
+  return `<span class="chip health-${h}"><span class="dot"></span>${HEALTH_LABEL[h] || h}</span>`;
 }
-
-// PRODUCT.md §7.1: the four takeover states, shown as a persistent state
-// indicator rather than a button.
-const TAKEOVER_LABEL = { auto: 'Auto', pausing: 'Pausing…', human_owned: 'Human owned', releasing: 'Releasing…' };
-
-function takeoverBadge(t) {
-  return `<span class="tk ${t}">${TAKEOVER_LABEL[t] || t}</span>`;
+// PRODUCT.md §7.1: the four takeover states. "auto" is the default and is
+// left unbadged on the card — a chip only appears when a human is actually
+// involved, which is the state worth a glance.
+const TAKEOVER_LABEL = { pausing: 'Pausing…', human_owned: 'Human owned', releasing: 'Releasing…' };
+function takeoverChip(t) {
+  return t === 'auto' ? '' : `<span class="chip tk-${t}">${TAKEOVER_LABEL[t] || t}</span>`;
 }
-
 // PRODUCT.md §11.1: board status is coarse and derived from health, never a
-// second source of truth — a stuck or crashed session is exactly what the
-// board's own "Needs Attention" status exists for.
+// second source of truth.
 function boardStatus(health) {
+  if (!health) return 'To Do';
   if (health === 'done') return 'Done';
   if (health === 'crashed' || health === 'stuck') return 'Needs Attention';
   return 'In Progress';
 }
-
 function lastActivity(events, sessionId) {
   const own = events.filter(e => e.session_id === sessionId);
   return own.reduce((max, e) => (e.ts > max ? e.ts : max), own[0].ts);
 }
-
-// The evidence and proposed nudge for a currently-stuck row, per §11.1
-// ("stuck rows: why it was flagged, the tier, and the proposed nudge") and
-// §6.2 (every verdict is a health.changed carrying tier and evidence).
 function stuckEvidence(events, sessionId) {
   const own = events.filter(e => e.session_id === sessionId).sort((a, b) => a.seq - b.seq);
   const change = [...own].reverse().find(e => e.type === 'health.changed' && e.payload.to === 'stuck');
@@ -127,33 +169,49 @@ function stuckEvidence(events, sessionId) {
 
 function render() {
   const { tasks, sessions, events } = SAMPLE_EVENTS;
-  const rows = sessions.map(s => {
-    const title = tasks[s.task_id] || s.task_id;
-    const stuck = s.health === 'stuck' ? stuckEvidence(events, s.id) : null;
-    const stuckHtml = stuck ? `
-      <div class="stuckpanel">
-        <div><span class="tier">Tier ${stuck.tier}</span> — ${escapeHtml(JSON.stringify(stuck.evidence))}</div>
-        ${stuck.nudge ? `<div class="nudge"><b>Proposed nudge:</b> ${escapeHtml(stuck.nudge)}</div>` : '<div class="nudge muted">No nudge sent yet.</div>'}
-      </div>` : '';
+  const COLUMNS = ['To Do', 'In Progress', 'Needs Attention', 'Done'];
+  const byColumn = Object.fromEntries(COLUMNS.map(c => [c, []]));
+
+  for (const taskId of Object.keys(tasks)) {
+    const session = sessions.find(s => s.task_id === taskId);
+    byColumn[boardStatus(session?.health)].push({ taskId, session });
+  }
+
+  document.getElementById('board').innerHTML = COLUMNS.map(col => {
+    const items = byColumn[col];
+    const cards = items.map(({ taskId, session }) => {
+      const title = tasks[taskId];
+      if (!session) {
+        return `<div class="card unclaimed" data-task="${taskId}">
+          <div class="title">${escapeHtml(title)}</div>
+          <div class="idrow">${taskId}</div>
+        </div>`;
+      }
+      const stuck = session.health === 'stuck' ? stuckEvidence(events, session.id) : null;
+      return `
+        <div class="card" data-session="${session.id}">
+          <div class="title">${escapeHtml(title)}</div>
+          <div class="idrow">${taskId} · ${session.id.slice(0, 8)}…</div>
+          <div class="chips">${healthChip(session.health)}${takeoverChip(session.takeover)}</div>
+          ${stuck ? `
+            <div class="stuckpanel">
+              <div class="head">Tier ${stuck.tier} · why it's flagged</div>
+              <code>${escapeHtml(JSON.stringify(stuck.evidence))}</code>
+              <div class="nudge">${stuck.nudge ? `<b>Proposed nudge:</b> ${escapeHtml(stuck.nudge)}` : 'No nudge sent yet.'}</div>
+            </div>` : ''}
+          <div class="foot"><span>${session.adapter}/${session.runtime}</span>${relTime(lastActivity(events, session.id))}</div>
+        </div>`;
+    }).join('');
     return `
-      <tr class="row" data-session="${s.id}">
-        <td>${escapeHtml(title)}<div class="muted">${s.task_id}</div>${stuckHtml}</td>
-        <td><span class="badge status">${boardStatus(s.health)}</span></td>
-        <td>${healthBadge(s.health)}</td>
-        <td>${takeoverBadge(s.takeover)}</td>
-        <td>${relTime(lastActivity(events, s.id))}</td>
-      </tr>`;
+      <div class="column">
+        <div class="colhead"><span class="name">${col}</span><span class="count">${items.length}</span></div>
+        <div class="cards">${cards || ''}</div>
+      </div>`;
   }).join('');
 
-  document.getElementById('board').innerHTML = `
-    <thead><tr>
-      <th>Task</th><th>Board status</th><th>Health</th><th>Takeover</th><th>Last activity</th>
-    </tr></thead>
-    <tbody>${rows}</tbody>`;
-
-  document.querySelectorAll('tr.row').forEach(tr => {
-    tr.addEventListener('click', () => {
-      location.href = 'session.html?session=' + encodeURIComponent(tr.dataset.session);
+  document.querySelectorAll('.card[data-session]').forEach(card => {
+    card.addEventListener('click', () => {
+      location.href = 'session.html?session=' + encodeURIComponent(card.dataset.session);
     });
   });
 }

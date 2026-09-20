@@ -4,69 +4,97 @@
 <meta charset="utf-8">
 <title>agentcrew — Session (mockup)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <style>
   :root {
-    --bg: #f6f7f9; --panel: #ffffff; --border: #dde1e6; --text: #1c2430; --muted: #5b6675;
-    --working: #2b6cb0; --waiting: #b7791f; --rate: #6b46c1; --stuck: #c2410c; --crashed: #c53030; --done: #2f855a;
-    --auto: #7b8794; --human: #2b6cb0; --agent: #eef2f7; --operator: #e6f0ff;
+    --bg: #f4f5f7; --panel: #ffffff; --border: #dfe3e9; --border-soft: #eaedf1;
+    --text: #1a212c; --muted: #626b7a; --accent: #0f8f86; --accent-weak: #e3f4f2;
+    --working: #3b82f6; --waiting: #d97706; --rate: #7c3aed; --stuck: #ea580c; --crashed: #dc2626; --done: #059669;
+    --working-weak: #e8f0fe; --waiting-weak: #fdf1e0; --rate-weak: #f1eafe; --stuck-weak: #fdece0; --crashed-weak: #fbe6e6; --done-weak: #e2f5ec;
+    --agent: #f0f2f5; --operator: #e6f0ff;
+    --sans: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1216; --panel: #171b21; --border: #262c35; --border-soft: #1e232b;
+      --text: #e7e9ed; --muted: #8b93a2; --accent: #3fd6cc; --accent-weak: #12302d;
+      --working: #5b9bff; --waiting: #f2a93c; --rate: #a78bfa; --stuck: #fb923c; --crashed: #f87171; --done: #34d399;
+      --working-weak: #16233d; --waiting-weak: #332612; --rate-weak: #241f3d; --stuck-weak: #33230f; --crashed-weak: #3a1b1b; --done-weak: #123527;
+      --agent: #1c222b; --operator: #16233d;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1216; --panel: #171b21; --border: #262c35; --border-soft: #1e232b;
+    --text: #e7e9ed; --muted: #8b93a2; --accent: #3fd6cc; --accent-weak: #12302d;
+    --working: #5b9bff; --waiting: #f2a93c; --rate: #a78bfa; --stuck: #fb923c; --crashed: #f87171; --done: #34d399;
+    --working-weak: #16233d; --waiting-weak: #332612; --rate-weak: #241f3d; --stuck-weak: #33230f; --crashed-weak: #3a1b1b; --done-weak: #123527;
+    --agent: #1c222b; --operator: #16233d;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif; }
-  header.top { background: var(--panel); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
-  header.top h1 { font-size: 16px; margin: 0; }
-  nav.pages a { color: var(--working); text-decoration: none; margin-right: 14px; font-size: 13px; }
-  nav.pages a:hover { text-decoration: underline; }
-  .banner { background: #fff8e1; border-bottom: 1px solid #f0d98c; color: #6b5300; padding: 6px 24px; font-size: 12px; }
-  select { font: inherit; padding: 4px 6px; }
-  main { max-width: 980px; margin: 24px auto; padding: 0 24px; display: grid; gap: 16px; }
-  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 16px; }
+  html, body { color-scheme: light dark; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 400 14px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .mockflag { background: var(--accent-weak); color: var(--accent); border-bottom: 1px solid var(--border); padding: 6px 20px; font: 500 11.5px/1.4 var(--sans); }
+  header.top { background: var(--panel); border-bottom: 1px solid var(--border); padding: 14px 20px; display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+  .brand { display: flex; align-items: center; gap: 9px; font: 700 15px/1 var(--sans); letter-spacing: -.01em; }
+  .brand .mark { width: 20px; height: 20px; border-radius: 5px; background: var(--accent); display: grid; place-items: center; color: var(--panel); font: 700 11px var(--sans); }
+  nav.pages { display: flex; gap: 4px; }
+  nav.pages a { color: var(--muted); text-decoration: none; font: 600 12.5px var(--sans); padding: 6px 10px; border-radius: 6px; }
+  nav.pages a:hover { background: var(--border-soft); color: var(--text); }
+  nav.pages a.current { background: var(--accent-weak); color: var(--accent); }
+  select { font: 400 13px var(--sans); padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--panel); color: var(--text); }
+  main { max-width: 980px; margin: 22px auto 60px; padding: 0 20px; display: grid; gap: 14px; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
   .meta { display: flex; flex-wrap: wrap; gap: 10px 24px; align-items: center; }
-  .meta .item { font-size: 12.5px; color: var(--muted); }
-  .meta .item b { color: var(--text); display: block; font-size: 13px; font-weight: 600; }
-  .badge { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; color: #fff; }
-  .badge.working { background: var(--working); }
-  .badge.waiting_for_input { background: var(--waiting); }
-  .badge.rate_limited { background: var(--rate); }
-  .badge.stuck { background: var(--stuck); }
-  .badge.crashed { background: var(--crashed); }
-  .badge.done { background: var(--done); }
-  .tk { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid; }
-  .tk.auto { color: var(--auto); border-color: var(--auto); background: #f2f4f6; }
-  .tk.human_owned { color: #fff; background: var(--human); border-color: var(--human); }
-  .tk.pausing, .tk.releasing { color: #fff; background: var(--waiting); border-color: var(--waiting); }
+  .meta .item { font-size: 12px; color: var(--muted); }
+  .meta .item b { color: var(--text); display: block; font: 600 13px var(--sans); }
+  .meta .item code { font: 400 12px var(--mono); }
+  .badge { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px; font: 600 11.5px var(--sans); }
+  .badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .badge.working { background: var(--working-weak); color: var(--working); }
+  .badge.waiting_for_input { background: var(--waiting-weak); color: var(--waiting); }
+  .badge.rate_limited { background: var(--rate-weak); color: var(--rate); }
+  .badge.stuck { background: var(--stuck-weak); color: var(--stuck); }
+  .badge.crashed { background: var(--crashed-weak); color: var(--crashed); }
+  .badge.done { background: var(--done-weak); color: var(--done); }
+  .tk { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px; font: 600 11.5px var(--sans); border: 1px solid var(--border); }
+  .tk.auto { color: var(--muted); background: var(--border-soft); border-color: transparent; }
+  .tk.human_owned { color: var(--accent); background: var(--accent-weak); border-color: transparent; }
+  .tk.pausing, .tk.releasing { color: var(--waiting); background: var(--waiting-weak); border-color: transparent; }
   .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-  button { font: inherit; padding: 6px 12px; border-radius: 5px; border: 1px solid var(--border); background: #fff; cursor: pointer; }
-  button:hover { background: #f2f4f6; }
-  button.primary { background: var(--human); color: #fff; border-color: var(--human); }
-  button.warn { background: var(--waiting); color: #fff; border-color: var(--waiting); }
-  button.ghost { background: transparent; }
-  .toast { font-size: 12.5px; color: var(--muted); min-height: 1.4em; }
+  button { font: 600 12.5px var(--sans); padding: 7px 13px; border-radius: 7px; border: 1px solid var(--border); background: var(--panel); color: var(--text); cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: var(--panel); border-color: var(--accent); }
+  button.warn { background: var(--waiting); color: #241a00; border-color: var(--waiting); }
+  button.ghost { background: transparent; font-weight: 500; }
+  .toast { font-size: 12px; color: var(--muted); min-height: 1.4em; margin-top: 2px; }
   .transcript { display: grid; gap: 8px; }
-  .divider { text-align: center; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; margin: 6px 0; }
-  .turncost { color: var(--muted); font-size: 11px; text-align: center; margin-top: -4px; }
-  .bubble { max-width: 78%; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); }
-  .bubble.operator { background: var(--operator); margin-right: auto; }
-  .bubble.agent { background: var(--agent); margin-left: auto; }
-  .bubble .who { font-size: 11px; color: var(--muted); margin-bottom: 3px; }
-  .tool { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; background: #f2f4f6; border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; }
-  .tool .outcome { float: right; font-weight: 600; }
+  .divider { text-align: center; color: var(--muted); font: 600 10.5px var(--sans); text-transform: uppercase; letter-spacing: .07em; margin: 8px 0 0; }
+  .turncost { color: var(--muted); font: 400 11px var(--mono); text-align: center; margin-top: -2px; }
+  .bubble { max-width: 78%; padding: 9px 13px; border-radius: 10px; border: 1px solid var(--border); }
+  .bubble.operator { background: var(--operator); margin-right: auto; border-color: transparent; }
+  .bubble.agent { background: var(--agent); margin-left: auto; border-color: transparent; }
+  .bubble .who { font: 600 10.5px var(--sans); text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-bottom: 3px; }
+  .tool { font: 400 12.5px/1.5 var(--mono); background: var(--border-soft); border: 1px solid var(--border); border-radius: 8px; padding: 7px 11px; }
+  .tool .outcome { float: right; font-weight: 600; font-family: var(--sans); }
   .tool .outcome.done { color: var(--done); }
   .tool .outcome.denied { color: var(--crashed); }
   .tool .outcome.pending { color: var(--waiting); }
-  .note { font-size: 12.5px; color: var(--muted); text-align: center; }
-  .note.nudge { color: #6b46c1; font-weight: 600; text-align: left; background: #f5f0ff; border: 1px solid #d9c9f7; border-radius: 6px; padding: 6px 10px; }
-  .note.takeover { color: var(--human); font-weight: 600; text-align: left; background: #eef4ff; border: 1px solid #c8dbfa; border-radius: 6px; padding: 6px 10px; }
-  .note.perm-deny { text-align: left; background: #fdecec; border: 1px solid #f3b8b8; border-radius: 6px; padding: 6px 10px; color: #8a2020; }
-  time { border-bottom: 1px dotted var(--muted); cursor: help; }
+  .note { font-size: 12px; color: var(--muted); text-align: center; }
+  .note.nudge { color: var(--rate); font-weight: 600; text-align: left; background: var(--rate-weak); border: 1px solid transparent; border-radius: 8px; padding: 7px 11px; }
+  .note.takeover { color: var(--accent); font-weight: 600; text-align: left; background: var(--accent-weak); border: 1px solid transparent; border-radius: 8px; padding: 7px 11px; }
+  time { border-bottom: 1px dotted var(--muted); cursor: help; text-decoration: none; }
 </style>
 </head>
 <body>
-<div class="banner">MOCKUP — sample data only, per PRODUCT.md §11.2. Controls below mutate a local copy of the event log; nothing is sent anywhere and reloading resets it.</div>
+<div class="mockflag">MOCKUP — sample data only, per PRODUCT.md §11.2. Controls below mutate a local copy of the event log; nothing is sent anywhere and reloading resets it.</div>
 <header class="top">
-  <h1>agentcrew — Session</h1>
+  <div class="brand"><span class="mark">A</span>agentcrew</div>
   <nav class="pages">
     <a href="board.html">Board</a>
-    <a href="session.html">Session</a>
+    <a href="session.html" class="current">Session</a>
     <a href="forensics.html">Forensics</a>
   </nav>
   <select id="picker"></select>

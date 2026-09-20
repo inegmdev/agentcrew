@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>agentcrew — Dependencies (mockup)</title>
+<title>agentcrew — Gantt (mockup)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
@@ -40,12 +40,31 @@
   nav.pages a.current { background: var(--accent-weak); color: var(--accent); }
 
   main { max-width: 1200px; margin: 0 auto; padding: 22px 20px 60px; }
+  .boardhead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
   .boardhead h1 { font: 700 20px/1.2 var(--sans); margin: 0; letter-spacing: -.01em; }
   .boardhead p { margin: 3px 0 18px; color: var(--muted); font-size: 13px; }
+
+  /* PRODUCT.md §11.5: Comfortable and Compact are the same data at two
+     densities, switched by re-pointing these tokens — never a separate
+     layout. Compact exists to fit many rows, not to shrink text for its
+     own sake, so only spacing and the redundant id line give way. */
+  .gantt { --row-h: 52px; --bar-h: 20px; --hist-h: 8px; --label-pad: 8px 12px; }
+  .gantt[data-density="compact"] { --row-h: 30px; --bar-h: 13px; --hist-h: 5px; --label-pad: 3px 12px; }
+  .gantt[data-density="compact"] .row .label .id { display: none; }
+  .gantt[data-density="compact"] .row .label .title { font-size: 11.5px; }
+  .gantt[data-density="compact"] .bar { font-size: 9.5px; padding: 0 6px; }
+
+  .density-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .density-toggle button { font: 600 11.5px var(--sans); padding: 6px 12px; border: none; background: var(--panel); color: var(--muted); cursor: pointer; }
+  .density-toggle button.active { background: var(--accent-weak); color: var(--accent); }
+  .density-toggle button:not(.active):hover { background: var(--border-soft); color: var(--text); }
 
   .legend { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin-bottom: 14px; font-size: 12px; color: var(--muted); }
   .legend .item { display: flex; align-items: center; gap: 6px; }
   .legend .swatch { width: 12px; height: 8px; border-radius: 2px; }
+  .legend .seg-demo { display: inline-flex; height: 6px; width: 22px; border-radius: 3px; overflow: hidden; }
+  .legend .seg-demo span:first-child { background: var(--working); flex: 1; }
+  .legend .seg-demo span:last-child { background: var(--waiting); flex: 1; }
 
   .gantt { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
   .axis { display: grid; grid-template-columns: 220px 1fr; border-bottom: 1px solid var(--border); }
@@ -58,22 +77,39 @@
   .axis .tick-line.now { position: absolute; top: 0; bottom: 0; right: 0; border-left: 1px dashed var(--accent); }
   .axis .tick-label.now { position: absolute; top: 6px; right: 0; padding-right: 4px; color: var(--accent); font: 600 10.5px var(--mono); white-space: nowrap; }
 
-  .row { display: grid; grid-template-columns: 220px 1fr; border-bottom: 1px solid var(--border-soft); align-items: center; min-height: 52px; }
+  .row { display: grid; grid-template-columns: 220px 1fr; border-bottom: 1px solid var(--border-soft); align-items: center; min-height: var(--row-h); }
   .row:last-child { border-bottom: none; }
-  .row .label { padding: 8px 12px; min-width: 0; }
+  .row .label { padding: var(--label-pad); min-width: 0; }
   .row .label .title { font: 600 12.5px/1.3 var(--sans); text-wrap: balance; }
   .row .label .id { font: 400 10.5px var(--mono); color: var(--muted); }
   .row .track { position: relative; height: 100%; }
   .gridline { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--border-soft); pointer-events: none; }
   .gridline.now { right: 0; border-left: 1px dashed var(--accent); opacity: .5; }
 
-  .bar { position: absolute; top: 50%; transform: translateY(-50%); height: 20px; border-radius: 5px; display: flex; align-items: center; padding: 0 8px; font: 600 11px var(--sans); color: #fff; white-space: nowrap; overflow: hidden; min-width: 10px; }
+  /* History: contiguous past health states, thin and unlabeled — the
+     record of how a task got here. Sized by flex-grow in proportion to
+     each segment's real duration, so segments always stay contiguous
+     regardless of layout. */
+  .history { position: absolute; top: 50%; transform: translateY(-50%); height: var(--hist-h); border-radius: 3px; display: flex; gap: 1px; overflow: hidden; }
+  .history .seg { flex-basis: 0; min-width: 2px; }
+  .history .seg.working { background: var(--working); }
+  .history .seg.waiting_for_input { background: var(--waiting); }
+  .history .seg.rate_limited { background: var(--rate); }
+  .history .seg.stuck { background: var(--stuck); }
+  .history .seg.crashed { background: var(--crashed); }
+  .history .seg.done { background: var(--done); }
+
+  .bar { position: absolute; top: 50%; transform: translateY(-50%); height: var(--bar-h); border-radius: 5px; display: flex; align-items: center; padding: 0 8px; font: 600 11px var(--sans); color: #fff; white-space: nowrap; overflow: hidden; min-width: 10px; }
   .bar.working { background: var(--working); }
   .bar.waiting_for_input { background: var(--waiting); }
   .bar.rate_limited { background: var(--rate); }
   .bar.stuck { background: var(--stuck); }
   .bar.crashed { background: var(--crashed); }
   .bar.done { background: var(--done); }
+  /* PRODUCT.md §11.5: the current state reads isolated from its history,
+     not blended into the timeline — a halo the same color as the page
+     background visually detaches it from whatever sits before it. */
+  .bar.isolated { box-shadow: 0 0 0 3px var(--panel); }
 
   /* Anchored by `right`, not `left`+transform: an auto-width box pinned to
      its right edge only ever grows leftward, so the label can never run
@@ -102,13 +138,19 @@
     <a href="board.html">Board</a>
     <a href="session.html">Session</a>
     <a href="forensics.html">Forensics</a>
-    <a href="dependencies.html" class="current">Dependencies</a>
+    <a href="gantt.html" class="current">Gantt</a>
   </nav>
 </header>
 <main>
   <div class="boardhead">
-    <h1>Dependencies</h1>
-    <p>Execution timing from the event store, laid against the dependency graph from the board.</p>
+    <div>
+      <h1>Gantt</h1>
+      <p>Execution timing from the event store, laid against the dependency graph from the board.</p>
+    </div>
+    <div class="density-toggle" id="densityToggle">
+      <button type="button" data-density="comfortable">Comfortable</button>
+      <button type="button" data-density="compact">Compact</button>
+    </div>
   </div>
   <div class="legend" id="legend"></div>
   <div class="gantt">
@@ -190,7 +232,32 @@ function renderLegend() {
   ).join('');
   document.getElementById('legend').innerHTML = swatches +
     `<span class="item"><span class="diamond" style="width:9px;height:9px;border:2px solid var(--muted);border-radius:2px;transform:rotate(45deg);display:inline-block;background:var(--panel)"></span>Ready, unclaimed</span>` +
-    `<span class="item"><span class="diamond" style="width:9px;height:9px;border:2px solid var(--waiting);border-radius:2px;transform:rotate(45deg);display:inline-block;background:var(--waiting);opacity:.5"></span>Blocked on a dependency</span>`;
+    `<span class="item"><span class="diamond" style="width:9px;height:9px;border:2px solid var(--waiting);border-radius:2px;transform:rotate(45deg);display:inline-block;background:var(--waiting);opacity:.5"></span>Blocked on a dependency</span>` +
+    `<span class="item"><span class="seg-demo"><span></span><span></span></span>history → isolated current state</span>`;
+}
+
+// PRODUCT.md §11.5: history is reconstructed from a session's own
+// health.changed events, never fabricated. The initial state is always
+// "working" per §6.1's [*] --> working, and the final/current segment
+// takes the session's own health field — the authoritative "right now" —
+// rather than whatever the last health.changed happened to say, since a
+// terminal state (done, crashed) is often reached with no explicit
+// transition event at all.
+function reconstructSegments(session) {
+  const changes = events
+    .filter(e => e.session_id === session.id && e.type === 'health.changed')
+    .sort((a, b) => a.seq - b.seq);
+  const endTs = session.ended_at ? Date.parse(session.ended_at) : now;
+  let curStart = Date.parse(session.started_at);
+  let curState = 'working';
+  const history = [];
+  for (const e of changes) {
+    const ts = Date.parse(e.ts);
+    history.push({ state: curState, start: curStart, end: ts });
+    curStart = ts;
+    curState = e.payload.to;
+  }
+  return { history, current: { state: session.health, start: curStart, end: endTs } };
 }
 
 // Anchor point for drawing an edge: a running/unclaimed task's "current"
@@ -212,10 +279,26 @@ function renderRows() {
     const session = byTask[taskId];
     let content;
     if (session) {
-      const left = pct(Date.parse(session.started_at));
-      const right = pct(session.ended_at ? Date.parse(session.ended_at) : now);
-      const width = Math.max(right - left, 1.2);
-      content = `<div class="bar ${session.health}" style="left:${left}%;width:${width}%" title="${session.started_at} → ${session.ended_at || 'still running'}">${HEALTH_LABEL[session.health]}</div>`;
+      const { history, current } = reconstructSegments(session);
+      let historyHtml = '';
+      if (history.length) {
+        const histLeft = pct(history[0].start);
+        const histWidthPct = Math.max(pct(current.start) - histLeft, 0);
+        const segsHtml = history.map(h => {
+          const dur = Math.max(h.end - h.start, 1);
+          const title = `${HEALTH_LABEL[h.state]} · ${new Date(h.start).toISOString()} → ${new Date(h.end).toISOString()}`;
+          return `<span class="seg ${h.state}" style="flex-grow:${dur}" title="${title}"></span>`;
+        }).join('');
+        // The forced 4px right margin is the gap that isolates the current
+        // segment: shaving it off history's own width, not shifting the
+        // current bar, keeps the current bar's timing exact.
+        historyHtml = `<div class="history" style="left:${histLeft}%;width:max(calc(${histWidthPct}% - 4px), 3px)">${segsHtml}</div>`;
+      }
+      const curLeft = pct(current.start);
+      const curWidth = Math.max(pct(current.end) - curLeft, 1.2);
+      const curTitle = `${new Date(current.start).toISOString()} → ${session.ended_at || 'still running'}`;
+      const barHtml = `<div class="bar ${current.state}${history.length ? ' isolated' : ''}" style="left:${curLeft}%;width:${curWidth}%" title="${curTitle}">${HEALTH_LABEL[current.state]}</div>`;
+      content = historyHtml + barHtml;
     } else {
       const blocked = isBlocked(taskId);
       content = `<div class="marker ${blocked ? 'blocked' : 'ready'}">
@@ -284,8 +367,32 @@ function drawEdges() {
   }
 }
 
+// Density is a per-viewer convenience, not data, so it's read and written
+// defensively: a private window or blocked storage just falls back to
+// Comfortable every load rather than breaking the page.
+const DENSITY_KEY = 'agentcrew-gantt-density';
+function loadDensity() {
+  try { return localStorage.getItem(DENSITY_KEY) === 'compact' ? 'compact' : 'comfortable'; }
+  catch { return 'comfortable'; }
+}
+function saveDensity(v) {
+  try { localStorage.setItem(DENSITY_KEY, v); } catch { /* per-viewer only; fine to drop */ }
+}
+function applyDensity(v) {
+  document.querySelector('.gantt').dataset.density = v;
+  document.querySelectorAll('.density-toggle button').forEach(b => b.classList.toggle('active', b.dataset.density === v));
+  drawEdges(); // row heights just changed; edge endpoints must be recomputed
+}
+
 renderLegend();
 renderRows();
+applyDensity(loadDensity());
+document.getElementById('densityToggle').addEventListener('click', e => {
+  const btn = e.target.closest('button[data-density]');
+  if (!btn) return;
+  applyDensity(btn.dataset.density);
+  saveDensity(btn.dataset.density);
+});
 window.addEventListener('resize', drawEdges);
 </script>
 </body>

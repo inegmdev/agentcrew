@@ -578,7 +578,7 @@ built, so the event model is designed against real screens.
 - Never render raw blob content inline. Show the preview and a link.
 - A page opened from `file://` cannot `fetch` a sibling JSON file; browsers block it. Sample data for the mockups is therefore a **JavaScript** file assigning `globalThis.SAMPLE_EVENTS`, loaded with a plain `<script src>`. This keeps "no build step" literally true.
 
-### 11.5 Dependencies (Gantt)
+### 11.5 Gantt (dependencies)
 
 Task-to-task dependencies are not a supervisor concept — they are Backlog.md's
 own `dependencies` field on a task, the same one this repo's own board uses
@@ -594,6 +594,9 @@ answering "what's blocked, and by how much."
 | a task with no session yet | a marker, not a bar — there is no execution timing to show |
 | dependency edges | a line from an upstream task's end to a downstream task's start |
 | a downstream task blocked on an incomplete dependency | visually distinct from one whose dependencies are all done, even before it has a session |
+| state history | non-current segments of a task's health timeline, reconstructed from its `health.changed` events, each colored by the state it names |
+| current state | visually isolated from the history segments — the task's live health reads at a glance, not blended into the timeline it took to get there |
+| density | a Comfortable and a Compact view, switchable in place; Compact exists to fit many rows without scrolling, not to shrink text for its own sake |
 
 ---
 
@@ -661,7 +664,7 @@ src/adapters/     claude.js  agy.js  gemini.js  mock.js
 src/runtime/      local.js
 src/supervisor/   session.js  health.js  takeover.js  store.js  blobs.js  hooks.js
 src/ui/           server.js  public/
-mockups/          board.html  session.html  forensics.html  dependencies.html  sample-events.js
+mockups/          board.html  session.html  forensics.html  gantt.html  sample-events.js
 test/             per §12.2
 ```
 

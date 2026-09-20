@@ -86,6 +86,19 @@
   .gridline { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--border-soft); pointer-events: none; }
   .gridline.now { right: 0; border-left: 1px dashed var(--accent); opacity: .5; }
 
+  /* Below phone width the 220px label column leaves too little room for
+     the timeline to be readable — axis labels collide and bars shrink to
+     illegible slivers. Stack label above track instead of beside it, per
+     Board's own reflow at the same width. renderGridlines and drawEdges
+     measure .track's real geometry rather than assuming an offset, so
+     this needs no JS change to stay correctly aligned. */
+  @media (max-width: 640px) {
+    .axis { grid-template-columns: 1fr; }
+    .axis .spacer { display: none; }
+    .row { grid-template-columns: 1fr; min-height: auto; padding-block: 6px; }
+    .row .track { height: auto; min-height: 30px; }
+  }
+
   /* History: contiguous past health states, thin and unlabeled — the
      record of how a task got here. Sized by flex-grow in proportion to
      each segment's real duration, so segments always stay contiguous
@@ -217,11 +230,23 @@ function renderTicks(ticks) {
     `<div class="tick-line now"></div><div class="tick-label now">now</div>`;
 }
 
+// Gridlines are children of #rows, which spans the label column AND the
+// track — but tick positions are percentages of the track alone. A plain
+// left:X% here measures against the wrong box by exactly the label
+// column's width. Measuring one real .track's geometry and computing a
+// pixel position from it is correct at any label-column width, including
+// zero once the phone layout below removes it.
 function renderGridlines(ticks) {
   const rowsEl = document.getElementById('rows');
   rowsEl.querySelectorAll('.gridline').forEach(el => el.remove());
+  const refTrack = rowsEl.querySelector('.row .track');
+  if (!refTrack) return;
+  const rowsRect = rowsEl.getBoundingClientRect();
+  const trackRect = refTrack.getBoundingClientRect();
+  const trackLeftPx = trackRect.left - rowsRect.left;
   for (const t of ticks) {
-    rowsEl.insertAdjacentHTML('beforeend', `<div class="gridline" style="left:${t.left}%"></div>`);
+    const leftPx = trackLeftPx + (t.left / 100) * trackRect.width;
+    rowsEl.insertAdjacentHTML('beforeend', `<div class="gridline" style="left:${leftPx}px"></div>`);
   }
   rowsEl.insertAdjacentHTML('beforeend', `<div class="gridline now"></div>`);
 }
@@ -320,7 +345,11 @@ function renderRows() {
 
 // Dependency edges are drawn after layout, in real pixel space, so the
 // curve always meets the actual bar/marker positions regardless of the
-// row heights the browser settles on.
+// row heights the browser settles on. Each endpoint is measured against
+// its row's own .track element, not the row as a whole — the row spans
+// the label column too, and a fraction meant for the track alone lands
+// short by exactly the label column's width if measured against the
+// full row (the same bug renderGridlines had, fixed the same way here).
 function drawEdges() {
   document.querySelectorAll('svg.edges').forEach(el => el.remove());
   const rowsEl = document.getElementById('rows');
@@ -330,37 +359,39 @@ function drawEdges() {
   rowsEl.style.position = 'relative';
   rowsEl.appendChild(svg);
 
+  function trackPoint(taskId, frac) {
+    const row = rowsEl.querySelector(`.row[data-task="${taskId}"]`);
+    if (!row) return null;
+    const r = row.querySelector('.track').getBoundingClientRect();
+    return { x: r.left - rowsRect.left + r.width * frac, y: r.top - rowsRect.top + r.height / 2 };
+  }
+
   for (const [downstream, deps] of Object.entries(dependencies)) {
-    const downRow = rowsEl.querySelector(`.row[data-task="${downstream}"]`);
-    if (!downRow) continue;
-    const downRect = downRow.getBoundingClientRect();
     const downBlocked = isBlocked(downstream);
-    const downX = downRect.left - rowsRect.left + downRect.width * (byTask[downstream] ? anchor(downstream, 'start') / 100 : 0.999);
-    const downY = downRect.top - rowsRect.top + downRect.height / 2;
+    const downFrac = byTask[downstream] ? anchor(downstream, 'start') / 100 : 0.999;
+    const down = trackPoint(downstream, downFrac);
+    if (!down) continue;
 
     for (const upstream of deps) {
-      const upRow = rowsEl.querySelector(`.row[data-task="${upstream}"]`);
-      if (!upRow) continue;
-      const upRect = upRow.getBoundingClientRect();
       const upDone = byTask[upstream]?.health === 'done';
-      const upX = upRect.left - rowsRect.left + upRect.width * (anchor(upstream, 'end') / 100);
-      const upY = upRect.top - rowsRect.top + upRect.height / 2;
+      const up = trackPoint(upstream, anchor(upstream, 'end') / 100);
+      if (!up) continue;
 
       // Bow the curve leftward, scaled to the vertical gap: when an
       // upstream task and its dependent both currently sit at "now" (both
       // still running or unclaimed), a plain midpoint control gives a
       // straight vertical line that hides against the now-gridline. A
       // fixed leftward bow keeps every edge visibly a curve.
-      const bow = Math.min(70, Math.max(24, Math.abs(downY - upY) * 0.35));
-      const c1x = upX - bow, c2x = downX - bow;
+      const bow = Math.min(70, Math.max(24, Math.abs(down.y - up.y) * 0.35));
+      const c1x = up.x - bow, c2x = down.x - bow;
       const cls = (!upDone && downBlocked) ? 'blocking' : '';
       const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      path.setAttribute('d', `M ${upX} ${upY} C ${c1x} ${upY}, ${c2x} ${downY}, ${downX} ${downY}`);
+      path.setAttribute('d', `M ${up.x} ${up.y} C ${c1x} ${up.y}, ${c2x} ${down.y}, ${down.x} ${down.y}`);
       path.setAttribute('class', cls);
       svg.appendChild(path);
 
       const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-      dot.setAttribute('cx', upX); dot.setAttribute('cy', upY); dot.setAttribute('r', 2.5);
+      dot.setAttribute('cx', up.x); dot.setAttribute('cy', up.y); dot.setAttribute('r', 2.5);
       dot.setAttribute('class', cls);
       svg.appendChild(dot);
     }

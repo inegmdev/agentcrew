@@ -40,15 +40,23 @@
   nav.pages a.current { background: var(--accent-weak); color: var(--accent); }
   select { font: 400 13px var(--sans); padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--panel); color: var(--text); }
   main { max-width: 1040px; margin: 22px auto 60px; padding: 0 20px; display: grid; gap: 14px; }
-  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  /* min-width:0 at every nesting level below main: CSS grid items default
+     to min-width:auto (shrink no further than their content), so one
+     unbroken string anywhere in the chain — a cwd path, a command — would
+     otherwise force that row's column wide, and because main is itself a
+     single-column grid, that width propagates up and widens every panel
+     on the page, not just the one row that caused it. */
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; min-width: 0; }
+  .table-wrap { overflow-x: auto; }
   h2 { font: 600 12px var(--sans); text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0 0 12px; }
   table { width: 100%; border-collapse: collapse; }
   th, td { text-align: left; padding: 7px 9px; border-bottom: 1px solid var(--border-soft); font-size: 13px; vertical-align: top; }
   th { color: var(--muted); font: 600 11px var(--sans); text-transform: uppercase; letter-spacing: .03em; }
   code, pre { font-family: var(--mono); font-size: 12px; }
   pre { background: var(--border-soft); border: 1px solid var(--border); border-radius: 8px; padding: 10px; overflow-x: auto; white-space: pre-wrap; margin: 0; }
-  .chain { display: grid; gap: 4px; }
-  .hop { display: grid; grid-template-columns: 60px 190px 1fr; gap: 10px; align-items: baseline; padding: 7px 9px; border-radius: 6px; }
+  .chain { display: grid; gap: 4px; min-width: 0; }
+  .hop { display: grid; grid-template-columns: 60px 190px 1fr; gap: 10px; align-items: baseline; padding: 7px 9px; border-radius: 6px; min-width: 0; }
+  .hop .text { min-width: 0; overflow-wrap: anywhere; }
   .hop.target { background: var(--accent-weak); border: 1px solid var(--accent); }
   .hop .seq { color: var(--muted); font-family: var(--mono); }
   .hop .type { font: 600 13px var(--sans); }
@@ -83,7 +91,7 @@
   </section>
   <section class="panel">
     <h2>Processes</h2>
-    <table id="processes"></table>
+    <div class="table-wrap"><table id="processes"></table></div>
   </section>
   <section class="panel">
     <h2>Cause chain</h2>
@@ -235,7 +243,7 @@ function renderChain(targetId) {
     <div class="hop ${e.id === targetId ? 'target' : ''}">
       <span class="seq">#${e.seq}</span>
       <span class="type">${e.type}<div class="actor">${e.actor} · ${relTime(e.ts)}</div></span>
-      <span>${escapeHtml(summarize(e))}</span>
+      <span class="text">${escapeHtml(summarize(e))}</span>
     </div>`).join('');
 }
 

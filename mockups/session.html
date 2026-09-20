@@ -69,6 +69,9 @@
   button.primary { background: var(--accent); color: var(--panel); border-color: var(--accent); }
   button.warn { background: var(--waiting); color: #241a00; border-color: var(--waiting); }
   button.ghost { background: transparent; font-weight: 500; }
+  button.danger { background: var(--crashed); color: #fff; border-color: var(--crashed); }
+  button.danger:hover { filter: brightness(0.92); border-color: var(--crashed); }
+  .confirm-prompt { font-size: 12px; color: var(--muted); }
   .toast { font-size: 12px; color: var(--muted); min-height: 1.4em; margin-top: 2px; }
   .transcript { display: grid; gap: 8px; }
   .divider { text-align: center; color: var(--muted); font: 600 10.5px var(--sans); text-transform: uppercase; letter-spacing: .07em; margin: 8px 0 0; }
@@ -215,7 +218,9 @@ function renderControls() {
   buttons.push('<span style="width:1px;height:20px;background:var(--border);display:inline-block;margin:0 4px;"></span>');
   buttons.push('<button class="ghost" data-interrupt="1">Interrupt: soft freeze (1)</button>');
   buttons.push('<button class="ghost" data-interrupt="2">Interrupt: end turn (2)</button>');
-  buttons.push('<button class="ghost" data-interrupt="3">Interrupt: hard kill (3)</button>');
+  // Level 3 is the one irreversible-feeling action on this page — it looks
+  // different from the other two and never fires on a single click.
+  buttons.push('<button class="danger" data-interrupt="3">Interrupt: hard kill (3)</button>');
   document.getElementById('controls').innerHTML = buttons.join(' ');
 
   const toast = document.getElementById('toast');
@@ -245,13 +250,29 @@ function renderControls() {
   });
   document.querySelectorAll('[data-interrupt]').forEach(b => b.addEventListener('click', () => {
     const level = b.dataset.interrupt;
+    if (level === '3') { showKillConfirm(); return; }
     const desc = {
       1: 'Level 1 (§7.3): a PreToolUse deny. The turn lives; the agent just cannot act.',
       2: 'Level 2 (§7.3): an in-band interrupt if the CLI advertises it, else SIGINT. Turn ends, session resumable.',
-      3: 'Level 3 (§7.3): hard kill, isolated in the runtime layer per OS. Process gone, session resumable by id.',
     }[level];
     toast.textContent = '[mock] ' + desc;
   }));
+}
+
+// Level 3 ends the process. It gets one extra click, not zero, and the
+// controls panel itself becomes the prompt rather than a browser confirm()
+// dialog that would look like nothing else on the page.
+function showKillConfirm() {
+  document.getElementById('controls').innerHTML = `
+    <span class="confirm-prompt">This ends the process immediately. The session stays resumable by id, per §7.3.</span>
+    <button class="danger" id="confirmKill">Confirm hard kill</button>
+    <button class="ghost" id="cancelKill">Cancel</button>`;
+  document.getElementById('confirmKill').addEventListener('click', () => {
+    renderControls();
+    document.getElementById('toast').textContent =
+      '[mock] Level 3 (§7.3): hard kill, isolated in the runtime layer per OS. Process gone, session resumable by id.';
+  });
+  document.getElementById('cancelKill').addEventListener('click', renderControls);
 }
 
 // Fold a tool.requested into one line with its outcome, found via §5.3

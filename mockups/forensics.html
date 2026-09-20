@@ -56,6 +56,12 @@
   .arrow { text-align: center; color: var(--muted); font-size: 10.5px; font-family: var(--mono); }
   time { border-bottom: 1px dotted var(--muted); cursor: help; text-decoration: none; }
   .running { color: var(--working); font-weight: 600; }
+  .humanized { font: 500 13px var(--sans); }
+  .humanized.running { color: var(--working); font-weight: 600; }
+  details { margin-top: 6px; }
+  details summary { cursor: pointer; font: 600 11px var(--sans); color: var(--muted); }
+  details summary:hover { color: var(--text); }
+  details pre { margin-top: 6px; }
 </style>
 </head>
 <body>
@@ -121,13 +127,49 @@ document.getElementById('picker').addEventListener('change', e => {
   location.href = 'forensics.html?session=' + encodeURIComponent(e.target.value);
 });
 
-// PRODUCT.md §11.3: started_by and ended_by "in full" — no summarizing, the
-// operator reading this after a failed overnight run needs every field.
+// §5.3's reason vocabulary is a schema for the store, not for a person
+// reading it after a failed overnight run. Read the sentence; the JSON is
+// still there, in full, one click away — "in full" per §11.3 never meant
+// "only as JSON."
+const START_SENTENCE = {
+  operator_action: (a) => `Started by ${a}.`,
+  schedule: () => 'Started on a schedule.',
+  nudge: () => 'Started by an automatic nudge.',
+  takeover: (a) => `Started when ${a} took over.`,
+  retry: () => 'Started as a retry.',
+  hook: () => 'Started by a hook.',
+  parent_tool_use: () => 'Started as a subagent call.',
+};
+const END_SENTENCE = {
+  completed: () => 'Finished normally.',
+  interrupted_by_operator: () => 'Stopped — you interrupted it.',
+  interrupted_by_supervisor: () => 'Stopped — the supervisor interrupted it.',
+  timeout_watchdog: () => 'Stopped — the watchdog timed it out.',
+  killed_tree: () => "Stopped — its process tree was killed.",
+  crashed: () => 'Crashed.',
+  quota_exhausted: () => 'Stopped — quota was exhausted.',
+  daemon_shutdown: () => 'Stopped — the daemon shut down.',
+  orphan_reaped: () => 'Stopped — reaped as an orphan after a daemon restart.',
+};
+const ACTOR_LABEL = { human: 'you', agent: 'the agent', supervisor: 'the supervisor', watchdog: 'the watchdog', schedule: 'the scheduler' };
+function humanizeReason(map, obj) {
+  const actor = ACTOR_LABEL[obj.actor] || obj.actor;
+  const fn = map[obj.reason];
+  return fn ? fn(actor) : `${obj.reason}, by ${actor}`;
+}
+
 function renderReasons() {
+  const startedCell = `
+    <div class="humanized">${escapeHtml(humanizeReason(START_SENTENCE, session.started_by))}</div>
+    <details><summary>View raw</summary><pre>${escapeHtml(JSON.stringify(session.started_by, null, 2))}</pre></details>`;
+  const endedCell = session.ended_by
+    ? `<div class="humanized">${escapeHtml(humanizeReason(END_SENTENCE, session.ended_by))}</div>
+       <details><summary>View raw</summary><pre>${escapeHtml(JSON.stringify(session.ended_by, null, 2))}</pre></details>`
+    : `<div class="humanized running">Still running — no ended_by yet.</div>`;
   document.getElementById('reasons').innerHTML = `
     <table>
-      <tr><th style="width:120px">started_by</th><td><pre>${escapeHtml(JSON.stringify(session.started_by, null, 2))}</pre></td></tr>
-      <tr><th>ended_by</th><td><pre>${session.ended_by ? escapeHtml(JSON.stringify(session.ended_by, null, 2)) : '<span class="running">still running — no ended_by yet</span>'}</pre></td></tr>
+      <tr><th style="width:120px">started_by</th><td>${startedCell}</td></tr>
+      <tr><th>ended_by</th><td>${endedCell}</td></tr>
     </table>`;
 }
 
@@ -165,11 +207,16 @@ function summarize(e) {
     case 'message.assistant': return `"${p.text}"`;
     case 'tool.requested': return `${p.tool_name}: ${p.tool_input.command || p.tool_input.file_path || ''}`;
     case 'tool.completed': return `${p.duration_ms}ms`;
+    case 'permission.requested': return `${p.tool_name}: ${p.tool_input.command || p.tool_input.file_path || ''}`;
     case 'permission.decided': return `${p.decision} by ${p.decided_by}`;
     case 'health.changed': return `${p.from} → ${p.to} (tier ${p.tier})`;
     case 'nudge.sent': return `"${p.text}"`;
+    case 'process.spawned': return `pid ${p.pid}`;
     case 'process.exited': return `exit ${p.exit_code ?? '—'} (${p.ended_by.reason})`;
+    case 'turn.started': return `turn ${p.turn_index}`;
+    case 'turn.ended': return `$${p.cost_usd.toFixed(3)} · ${p.tokens.input} in / ${p.tokens.output} out`;
     case 'session.ended': return p.ended_by.reason;
+    case 'takeover.requested': case 'takeover.acquired': case 'takeover.released': return '';
     default: return Object.keys(p).length ? JSON.stringify(p) : '';
   }
 }

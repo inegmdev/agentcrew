@@ -1,8 +1,14 @@
 # agentcrew
 
-A setup wizard that turns any git repo into one an agent can work
-autonomously — a task board, a memory layer, and a planning loop, wired
-together and installed with a single command.
+A local AI software-team workspace in development: plan an iteration, direct a
+team of agents, inspect progress, and take control when needed.
+
+**Available today:** the setup wizard, Backlog.md integration, Markdown memory,
+and board watcher described below. **Specified next:** the role-based team,
+interactive CLI sessions, isolated worktrees, and dashboard suite.
+
+Read the [PRD](docs/PRD.md) for product behavior and the [TRD](docs/TRD.md) for the
+proposed architecture, interfaces, and verification plan.
 
 ```mermaid
 flowchart LR
@@ -14,8 +20,9 @@ flowchart LR
 
 ## The rule everything here follows
 
-**No login walls. No hosted services in the critical path. Your data in a
-format you own.**
+**No mandatory agentcrew account or hosted control plane. Your data in a
+format you own.** Provider inference and GitHub/CI still use their own accounts
+and network services.
 
 This project previously used a board that required an account for local
 issue tracking, then shut down. It was open source — that wasn't enough.
@@ -34,7 +41,7 @@ decision, and note.
 | Decisions | `backlog decision` | `backlog/decisions/*.md` |
 | Planning | [mattpocock/skills](https://github.com/mattpocock/skills) | `.scratch/<feature>/` |
 
-No database. No server. No account.
+The current installer needs no agentcrew database, server, or account.
 
 The supervisor now being designed adds a local event store outside your repo,
 which does not change that rule: intent stays as markdown you own, and the
@@ -205,137 +212,53 @@ on" will eventually disagree, and then neither can be trusted.
 
 ## Where this is going
 
-agentcrew is growing from an installer into a **supervisor**: it will own agent
-sessions rather than firing them and hoping. The requirement that drives it is
-human takeover — you watch the board, see an agent stuck, and take the wheel
-mid-task. You cannot do that with a session another program owns.
-
-### The loop it is built around
-
-```mermaid
-sequenceDiagram
-    actor Dev as You
-    participant Board as Board
-    participant Sup as Supervisor
-    participant CLI as Agent CLI
-    participant Store as Event store
-
-    Dev->>Board: promote a task
-    Board->>Sup: intent
-    Sup->>CLI: spawn with a minted session id
-    Sup->>Board: status becomes In Progress
-    CLI-->>Sup: stream of events
-    Sup->>Store: append every event
-
-    Note over CLI: the agent hits a wall
-    CLI-->>Sup: hook push, agent_needs_input
-    Sup->>Store: health becomes waiting_for_input
-    Sup-->>Dev: surfaced on the board
-
-    alt a nudge is enough
-        Sup->>CLI: resume with guidance
-    else a human is needed
-        Dev->>Sup: take over
-        Sup->>CLI: deny further tool calls
-        Dev->>CLI: drive the session directly
-        Dev->>Sup: release
-    end
-
-    CLI-->>Sup: result
-    Sup->>Store: ended_by completed
-    Sup->>Board: status becomes Done
-```
-
-Intent flows one way, from the board into a session. Only coarse status comes
-back, written by a single writer, so the two can never disagree about what is
-being worked on.
-
-### Where each kind of data lives
+The agreed v1 direction is a local workspace for one operator, one repository,
+and one active iteration. The default roster has one business analyst, one
+product owner, one architect, four developers, four testers, and two integrators.
+Four active provider turns run at once by default; agent identities persist
+independently of running sessions.
 
 ```mermaid
-flowchart TB
-    subgraph git["In your repo, versioned in git"]
-        T["backlog/tasks/*.md<br/>intent"]
-        D["backlog/decisions/*.md"]
-        M["docs/memory/<br/>long-term and short-term"]
-    end
-
-    subgraph home["Outside the repo, under ~/.agentcrew"]
-        REG["registry<br/>id, path, port, pid"]
-        DB[("per-project SQLite<br/>events, sessions, processes")]
-        BLOB["blobs/<br/>large tool payloads"]
-    end
-
-    subgraph run["Running"]
-        SUP["Supervisor<br/>one daemon per project"]
-        AD["Adapter<br/>claude, agy, gemini, mock"]
-        RT["Runtime<br/>local, worktree, docker, ssh"]
-        AG["Agent CLI process"]
-    end
-
-    UI["Web UI"]
-
-    T -->|"intent"| SUP
-    SUP -->|"coarse status only"| T
-    SUP --> AD --> RT --> AG
-    AG -->|"stream-json"| AD
-    AG -->|"hook pushes"| SUP
-    AD -->|"normalised events"| SUP
-    SUP -->|"small rows"| DB
-    SUP -->|"payloads over the row cap"| BLOB
-    DB -.->|"hash reference"| BLOB
-    SUP --> REG
-    SUP -->|"day sections"| M
-    UI -->|"read only"| DB
-    UI -->|"discovers projects"| REG
+flowchart LR
+    I["Markdown / CSV requirements"] --> P["BA + PO + architect planning"]
+    P --> H["Human approves iteration"]
+    H --> D["Design review + developer TDD"]
+    D --> T["Independent testing"]
+    T --> R["Integration + reviewed PRs"]
+    R --> A["Integrated acceptance"]
+    U["Kanban · team room · observability"] <--> D
+    C["Popup scope change + impact approval"] -.-> H
 ```
 
-Tasks, decisions and memory are intent: hand-edited, reviewed, and yours in
-markdown. Transcripts, process rows and heartbeats are events: append-only,
-machine-queried, and far too chatty for git. The store sits outside the repo
-because `git clean -xdf` would delete it.
+- Persistent named agents with readable role definitions, skills, memory, and handoffs.
+- Browser conversations and explicit takeover through official CLI providers;
+  agy, Codex, and Gemini must be qualified before the first platform release.
+- Configurable human gates; human merges by default, explicit autopilot available.
+- One worktree per implementation task; exact-revision reviews and integrated acceptance.
+- Markdown/CSV source snapshots and popup tickets for approved in-iteration scope changes.
+- Kanban, minimal pixel-art team room, evidence-linked metrics, utilization, and diagnostics.
+- Markdown intent in the repository; transcripts and events in a local store outside it.
 
-What that means in practice:
+Frontend dependencies/build tooling are allowed. The platform remains local with a
+protected loopback interface. Provider authentication stays in official CLIs;
+GitHub authentication stays in its client. This design does not promise unlimited
+subscription usage or identical provider protocols.
 
-| Piece | Shape |
+## Specification and status
+
+| Document | Read for |
 |---|---|
-| Adapters | one per CLI, normalising into agentcrew's own event schema |
-| Runtimes | local first; git worktree, docker and ssh are the same seam later |
-| Health | hook pushes, then deterministic signals, then an LLM watchdog, with a wall clock underneath |
-| Takeover | a state machine, enforced by denying the agent's tool calls while a human holds it |
-| Archive | every conversation and process, with what started it and what ended it |
+| [PRD](docs/PRD.md) | Scope, setup, roles, workflows, controls, dashboards, acceptance |
+| [TRD](docs/TRD.md) | Proposed modules, provider contracts, data, recovery, APIs, tests |
+| [PRODUCT.md](PRODUCT.md) | Document authority and old supervisor section mappings |
+| [Backlog decisions](backlog/decisions/) | Accepted reasoning and superseded assumptions |
 
-Two rules it will not bend. **No vendor credential is ever handled, forwarded
-or proxied** — the official binaries authenticate themselves, and nothing is
-exposed on a port. And **no vendor credentials in CI**: tests run against
-mocked CLIs and recorded fixtures, so the suite works on a fork with no secrets
-configured.
+The installer and watcher exist; the AI Team Workspace is specified, not implemented.
+The old Supervisor v1 tasks remain planning history and must be reconciled with the
+new specification before implementation. No provider has been qualified against the
+new interactive contract merely by producing these documents.
 
-The full specification, including the event model, the health tiers, the
-takeover protocol and the storage layout, is in [`PRODUCT.md`](PRODUCT.md).
-It is normative: every task on the board cites it by section. The reasoning
-behind it, including what was rejected and why, is in
-[`backlog/decisions/`](backlog/decisions/). Start at `decision-3`.
-
-## Status
-
-The board, memory layer, and daemon all work and are verified against real
-installs. The supervisor above is **designed, not built** — it sits on the
-board as the `Supervisor v1` milestone, `task-1` through `task-10`.
-
-Two things start it, and they run in parallel. `task-10` is a clickable
-mockup, so the screens can be argued about before anything is built. `task-1`
-is a protocol spike against the real CLIs, because one mechanism the design
-depends on is undocumented for the raw CLI. Everything else waits on one of
-them.
-
-Not yet built: worktree isolation and agent launching. Moving a task to
-`In Progress` is journalled but does not yet spin up a worktree and start an
-agent in it.
-
-Only Claude Code's headless flag (`-p`) has been verified first-hand; the
-other agents' flags are best-effort defaults and are marked as unverified in
-`src/daemon/agents.js`. Gemini CLI is kept deliberately for locked-down
-corporate machines even though Google retired it for the consumer tiers, and
-ships marked unverified. See `docs/memory/MEMORY.md` for the full
-verified/unverified split.
+The current package still supports Node >=18. The TRD proposes Node 24 for the future
+platform release; this documentation change does not alter runtime requirements.
+No test suite or CI workflow is currently present. The TRD defines the required
+credential-free tests and separate local, authenticated provider qualification.

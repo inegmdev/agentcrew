@@ -10,10 +10,15 @@ autonomously: a task board, a memory layer, and a planning loop. It is a
 **reusable installer** — run once per repo, and `agentcrew update` re-applies
 improvements across every repo registered in `~/.agentcrew/state.json`.
 
-Since decision-3 it is also becoming a **platform**: a supervisor that owns
-agent sessions, watches their health, archives every conversation, and lets a
-human take the wheel mid-task. The installer remains; it is no longer the
-whole product. None of the supervisor is built yet.
+The October 2026 design expands this into a **local AI Team Workspace**:
+one operator, one repo, one iteration; persistent BA/PO/architect/developer/
+tester/integrator identities, provider-backed conversations, controlled
+handoffs, and a dashboard suite. The installer remains. None of the team
+supervisor, provider plugins, worktrees, or dashboards is built yet.
+
+Read [the PRD](../PRD.md) for scope/behavior and [the TRD](../TRD.md) for
+proposed architecture/contracts before implementing platform work. The TRD
+separates engineering defaults from verified provider capabilities.
 
 ```mermaid
 flowchart LR
@@ -21,7 +26,7 @@ flowchart LR
     B --> C["Board<br/>backlog/tasks/*.md"]
     E["GitHub Issues<br/>intake only"] -->|"one-way, manual"| C
     C -->|"intent"| S["Supervisor<br/>(designed, not built)"]
-    S -->|"spawn / resume"| X["claude · agy · gemini"]
+    S -->|"spawn / resume"| X["agy · Codex · Gemini"]
     S -->|"events"| DB[("~/.agentcrew<br/>per-project store")]
     S -->|"coarse status"| C
     D["Memory<br/>docs/memory/"] -.->|"read at start<br/>written at end"| C
@@ -29,17 +34,14 @@ flowchart LR
 
 ## The selection criterion (this is the load-bearing one)
 
-Every dependency must satisfy: **no login wall, no hosted component in the
-critical path, data in a format we own, and it still works if the maintainer
-disappears tomorrow.**
+The platform must require **no agentcrew account or hosted control plane**;
+its durable knowledge stays in owned formats. Provider inference and GitHub/CI
+have their own network/account requirements. Frontend build tooling and
+maintained dependencies are allowed under the October design; local data must
+remain useful if a maintainer disappears.
 
-This came from being burned. The stack originally used Vibe Kanban, which
-required a login for local issue tracking and then announced its company was
-shutting down. It was *open source* and still failed, so "open source" is not
-the filter. The filter is **"can this take my data with it when it dies."**
-
-Backlog.md passes: tasks are markdown in your own repo. If it is abandoned,
-you lose a TUI and keep every task.
+Backlog.md keeps tasks as Markdown even if the tool is abandoned. That data
+ownership requirement survives the move to a richer web application.
 
 ## Load-bearing decisions
 
@@ -74,10 +76,17 @@ you lose a TUI and keep every task.
    index. Git would keep deleted logs, but nothing would ever look there.
    Enforcement is markdown policy in `templates/AGENTS.snippet.md`, per
    decision 4.
-8. **`PRODUCT.md` is the normative spec; `backlog/decisions/` holds the
-   reasoning.** The spec says what to build, the ADRs say why and what was
-   rejected. Tasks cite the spec by section. If the two disagree, the ADR wins
-   and the spec is wrong. Read both, don't re-derive them.
+8. **PRD owns product requirements; TRD owns proposed implementation design.**
+   `PRODUCT.md` is the entry point and preserves old numbered anchors.
+   Accepted ADRs govern architecture; explicit supersessions qualify older
+   decisions. Historical provider/terms claims are not current evidence.
+9. **October defaults:** 13 identities (1 BA, 1 PO, 1 architect, 4 devs,
+   4 testers, 2 integrators); 4 active turns. Delegation stays in the roster.
+   Human approves plan/scope changes; merges and memory approval configurable.
+   Browser takeover permits human-directed tools, suppresses autonomous input.
+10. **Scope changes are popup tickets.** Preserve the iteration baseline;
+    show reusable/discarded work, estimated/actual impact, revised commitment.
+    Integrated acceptance, not conversation completion, proves delivery.
 
 | ADR | Says |
 |---|---|
@@ -86,12 +95,17 @@ you lose a TUI and keep every task.
 | decision-3 | agentcrew *is* the orchestrator; takeover is the forcing need |
 | decision-4 | intent in markdown, events in a store outside the repo |
 | decision-5 | interrupts in-band first; signals are a per-OS runtime concern |
-| decision-6 | mocked CLIs in tests; no vendor credentials in CI |
+| decision-6 | mocked CLIs and no vendor credentials in CI; older provider/dependency assumptions superseded |
+| decision-7 | accepted team-workspace direction and explicit legacy supersessions |
+| decision-8 | proposed technical baseline; provider verification still required |
 
 ## Verified facts
 
-Spiked against backlog.md **v1.48.0**. The CLI now resolves to v1.52.0, so
-re-spike before trusting this block.
+Original behavior was spiked against Backlog.md **v1.48.0**. During the
+2026-10-11 docs task, a temporary **v1.52.0** install verified task/decision
+creation help; re-spike runtime bridge operations before implementation.
+The CLI was absent from PATH; temporary tooling lives under `/tmp`, not the
+project dependency manifest.
 
 - Install: `npm install -g backlog.md`. 2 packages, ~3s. Cross-platform.
 - `backlog init` is non-interactive with
@@ -124,9 +138,10 @@ transitions.
 - Baseline is read from disk at startup rather than persisted, so a restart
   never replays old transitions. Transitions while it is stopped are missed by
   design.
-- **Consolidation writes `docs/memory/MEMORY.proposed.md`, never `MEMORY.md`.**
-  Appending to a log is safe; consolidation is lossy on purpose, so a human
-  accepts the drop. This asymmetry is load-bearing, not politeness.
+- **Current consolidation writes `docs/memory/MEMORY.proposed.md`, never
+  `MEMORY.md`.** The future platform retains human review by default and
+  allows explicitly configured automatic application with archived versions.
+  Diagnostic proposals changing governing rules always require human approval.
 
 Decision-3 gives the daemon a second half, the session supervisor, which
 *does* hold state: a per-project SQLite store outside the repo (decision-4).
@@ -135,22 +150,22 @@ the daemon loses automation and event history, never tasks.
 
 ## Not yet done
 
-- **The supervisor slice.** Designed in decision-3 through decision-6, sitting
-  on the board as the `Supervisor v1` milestone, task-1 through task-10.
-  Nothing built. Two entry points, run in parallel: task-10, a clickable
-  mockup that settles the screens and seeds the event schema, and task-1, a
-  protocol spike, because decision-5 rests on an in-band interrupt that is
-  undocumented for the raw CLI. Everything else depends on one of them.
-- **Worktree isolation and agent launching.** Now framed as the `worktree`
-  runtime in decision-3's adapter/runtime split.
-- **Nothing is auto-committed.** The daemon writes files; it doesn't commit or
-  open PRs.
-- **Only `claude -p` is verified.** Gemini, Kimi, Codex and Cursor flags in
-  `src/daemon/agents.js` are best-effort and marked `verified: false`.
-- **Windows.** The code is Windows-capable but has only been run on Linux, and
-  decision-5 makes Windows behaviour genuinely divergent.
-- `/setup-matt-pocock-skills` and filling in `docs/memory/MEMORY.md` stay
-  manual. Both need judgment a script doesn't have.
+- **AI Team Workspace:** detailed in PRD/TRD. The older Supervisor v1 tasks
+  (task-1..10) remain planning history and need reconciliation before use.
+- **Provider qualification:** agy, Codex, Gemini all required for release.
+  CLI help/output streaming does not prove interactive input, permissions,
+  interruption, resume, or roster-only delegation enforcement. Each is a
+  blocking spike; do not assume Claude-compatible flags or minted native IDs.
+- **Worktrees/GitHub:** task isolation, exact-commit reviews, both integration
+  strategies, default human merges. No application changes were made by docs.
+- **Dashboards:** Kanban, pixel-art room, observability; metrics/diagnostics
+  use evidence. Learned historical estimation is deferred.
+- **Testing:** no suite/CI exists yet. Required Windows/Linux jobs use fake
+  providers and sanitized fixtures; real provider checks remain local.
+- **Current daemon does not auto-commit or open PRs.** Future supervised work
+  has explicit commit/PR/merge policies; do not attribute them to today's code.
+- `/setup-matt-pocock-skills` and initial project-memory authoring remain
+  judgment-driven manual steps in the existing installer.
 
 ## Memory layout (since 0.5.0)
 
@@ -170,7 +185,10 @@ deleted.
 
 | Path | Role |
 |---|---|
-| `PRODUCT.md` | the normative spec; tasks cite it by section |
+| `PRODUCT.md` | spec entry point; preserved legacy task section anchors |
+| `docs/PRD.md` | agreed product requirements, stories, and acceptance |
+| `docs/TRD.md` | proposed technical design and verification gates |
+| `docs/archive/` | preserved historical specification, not active guidance |
 | `backlog/decisions/` | agentcrew's own ADRs; the repo dogfoods its board |
 | `backlog/tasks/` | agentcrew's own board; `Supervisor v1` is task-1..10 |
 | `bin/wizard.js` | CLI entry: `setup <path>`, `update`, `daemon` |

@@ -4,6 +4,16 @@ title: 'agentcrew is the orchestrator: a session supervisor over CLI adapters'
 date: '2026-09-19 16:15'
 status: accepted
 ---
+
+## October 2026 qualification
+
+This record is historical reasoning and is **partially superseded** by
+[decision-7](decision-7%20-%20AI-Team-Workspace-v1-product-scope-and-supersession-of-supervisor-assumptions.md).
+Read its supersession map before implementation. The current requirements are
+[the PRD](../../docs/PRD.md); the proposed design is [the TRD](../../docs/TRD.md).
+Provider flags, capabilities, and account-policy claims below are historical
+observations, not current qualification evidence. Unlisted principles remain.
+
 ## Context
 
 Supersedes decision-1. The forcing requirement is **human takeover of a running

@@ -8,6 +8,7 @@ class PixelRoomRenderer {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.onAgentClick = options.onAgentClick || null;
+    this.theme = options.theme || 'light';
 
     this.tileW = 72;
     this.tileH = 36;
@@ -63,6 +64,10 @@ class PixelRoomRenderer {
     }
   }
 
+  setTheme(theme) {
+    this.theme = theme || 'light';
+  }
+
   bindEvents() {
     this.canvas.addEventListener('mousemove', (e) => {
       const rect = this.canvas.getBoundingClientRect();
@@ -107,7 +112,7 @@ class PixelRoomRenderer {
     ctx.imageSmoothingEnabled = false;
 
     // Clear background
-    ctx.fillStyle = '#0f172a';
+    ctx.fillStyle = this.theme === 'light' ? '#f1f5f9' : '#0f172a';
     ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
     // 1. Draw Office Back Walls
@@ -143,9 +148,10 @@ class PixelRoomRenderer {
     const rightCorner = this.toIso(this.gridSize, 0);
     const leftCorner = this.toIso(0, this.gridSize);
     const wallHeight = 70;
+    const isLight = this.theme === 'light';
 
     // Left wall
-    ctx.fillStyle = '#1e293b';
+    ctx.fillStyle = isLight ? '#e2e8f0' : '#1e293b';
     ctx.beginPath();
     ctx.moveTo(origin.x, origin.y);
     ctx.lineTo(origin.x, origin.y - wallHeight);
@@ -153,11 +159,11 @@ class PixelRoomRenderer {
     ctx.lineTo(leftCorner.x, leftCorner.y);
     ctx.closePath();
     ctx.fill();
-    ctx.strokeStyle = '#334155';
+    ctx.strokeStyle = isLight ? '#cbd5e1' : '#334155';
     ctx.stroke();
 
     // Right wall
-    ctx.fillStyle = '#273549';
+    ctx.fillStyle = isLight ? '#cbd5e1' : '#273549';
     ctx.beginPath();
     ctx.moveTo(origin.x, origin.y);
     ctx.lineTo(origin.x, origin.y - wallHeight);
@@ -165,25 +171,25 @@ class PixelRoomRenderer {
     ctx.lineTo(rightCorner.x, rightCorner.y);
     ctx.closePath();
     ctx.fill();
-    ctx.strokeStyle = '#334155';
+    ctx.strokeStyle = isLight ? '#94a3b8' : '#334155';
     ctx.stroke();
 
     // Pixel Window on Right Wall
     const winIso = this.toIso(3, 0);
     ctx.fillStyle = '#0284c7';
     ctx.fillRect(winIso.x - 24, winIso.y - wallHeight + 15, 48, 28);
-    ctx.fillStyle = '#bae6fd';
+    ctx.fillStyle = isLight ? '#e0f2fe' : '#bae6fd';
     ctx.fillRect(winIso.x - 22, winIso.y - wallHeight + 17, 44, 24);
     // Window cross
-    ctx.fillStyle = '#334155';
+    ctx.fillStyle = isLight ? '#64748b' : '#334155';
     ctx.fillRect(winIso.x - 2, winIso.y - wallHeight + 17, 4, 24);
     ctx.fillRect(winIso.x - 22, winIso.y - wallHeight + 28, 44, 3);
 
     // Pixel Whiteboard on Left Wall
     const boardIso = this.toIso(0, 3);
-    ctx.fillStyle = '#f8fafc';
+    ctx.fillStyle = '#ffffff';
     ctx.fillRect(boardIso.x - 30, boardIso.y - wallHeight + 16, 50, 26);
-    ctx.strokeStyle = '#64748b';
+    ctx.strokeStyle = isLight ? '#94a3b8' : '#64748b';
     ctx.lineWidth = 2;
     ctx.strokeRect(boardIso.x - 30, boardIso.y - wallHeight + 16, 50, 26);
     // Diagram doodles
@@ -198,9 +204,14 @@ class PixelRoomRenderer {
     const { x, y } = this.toIso(gx, gy);
     const hw = this.tileW / 2;
     const hh = this.tileH / 2;
+    const isLight = this.theme === 'light';
 
     const isEven = (gx + gy) % 2 === 0;
-    ctx.fillStyle = isEven ? '#1c2438' : '#171e2e';
+    if (isLight) {
+      ctx.fillStyle = isEven ? '#f8fafc' : '#ede8e1';
+    } else {
+      ctx.fillStyle = isEven ? '#1c2438' : '#171e2e';
+    }
 
     ctx.beginPath();
     ctx.moveTo(x, y);
@@ -210,7 +221,7 @@ class PixelRoomRenderer {
     ctx.closePath();
     ctx.fill();
 
-    ctx.strokeStyle = '#232d42';
+    ctx.strokeStyle = isLight ? '#e2e8f0' : '#232d42';
     ctx.lineWidth = 1;
     ctx.stroke();
   }
@@ -282,9 +293,9 @@ class PixelRoomRenderer {
     }
 
     // 1. Isometric Office Desk
-    ctx.fillStyle = '#475569';
+    ctx.fillStyle = this.theme === 'light' ? '#cbd5e1' : '#475569';
     ctx.fillRect(x - 14, y + 10, 28, 12);
-    ctx.fillStyle = '#334155';
+    ctx.fillStyle = this.theme === 'light' ? '#94a3b8' : '#334155';
     ctx.fillRect(x - 14, y + 20, 28, 4);
 
     // 2. Desktop Monitor with glowing pixel screen
@@ -294,7 +305,7 @@ class PixelRoomRenderer {
     ctx.fillStyle = st.state === 'takeover' ? '#f59e0b' : '#38bdf8';
     ctx.fillRect(x - 5, y + 3, 10, 6);
     // Keyboard
-    ctx.fillStyle = '#94a3b8';
+    ctx.fillStyle = this.theme === 'light' ? '#64748b' : '#94a3b8';
     ctx.fillRect(x - 6, y + 12, 12, 3);
 
     // 3. Pixel Character Avatar seated at desk
@@ -327,8 +338,8 @@ class PixelRoomRenderer {
     }
 
     // Agent Name Tag below desk
-    ctx.fillStyle = '#f8fafc';
-    ctx.font = '9px monospace';
+    ctx.fillStyle = this.theme === 'light' ? '#1e293b' : '#f8fafc';
+    ctx.font = 'bold 9px monospace';
     ctx.textAlign = 'center';
     ctx.fillText(st.name, x, y + 32);
 
@@ -393,25 +404,26 @@ class PixelRoomRenderer {
     const boxH = 46;
     const bx = Math.min(Math.max(x - boxW / 2, 10), this.canvas.width - boxW - 10);
     const by = y - 55;
+    const isLight = this.theme === 'light';
 
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.95)';
-    ctx.strokeStyle = '#38bdf8';
+    ctx.fillStyle = isLight ? 'rgba(255, 255, 255, 0.98)' : 'rgba(15, 23, 42, 0.95)';
+    ctx.strokeStyle = isLight ? '#0284c7' : '#38bdf8';
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.roundRect(bx, by, boxW, boxH, 4);
     ctx.fill();
     ctx.stroke();
 
-    ctx.fillStyle = '#f8fafc';
+    ctx.fillStyle = isLight ? '#0f172a' : '#f8fafc';
     ctx.font = 'bold 10px sans-serif';
     ctx.textAlign = 'left';
     ctx.fillText(`${st.name} (${st.role})`, bx + 8, by + 14);
 
-    ctx.fillStyle = '#94a3b8';
+    ctx.fillStyle = isLight ? '#475569' : '#94a3b8';
     ctx.font = '9px monospace';
     ctx.fillText(`${st.provider} · ${st.model}`, bx + 8, by + 27);
 
-    ctx.fillStyle = st.state === 'takeover' ? '#fbbf24' : '#38bdf8';
+    ctx.fillStyle = st.state === 'takeover' ? (isLight ? '#d97706' : '#fbbf24') : (isLight ? '#0284c7' : '#38bdf8');
     ctx.fillText(`State: ${st.state.toUpperCase()}`, bx + 8, by + 39);
   }
 }

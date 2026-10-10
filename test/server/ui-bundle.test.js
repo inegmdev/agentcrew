@@ -29,6 +29,9 @@ test('SupervisorServer serves interactive Web UI dashboard bundle', async (t) =>
     assert.ok(res.headers.get('content-type').includes('text/html'));
     const html = await res.text();
     assert.ok(html.includes('AgentCrew — AI Team Workspace'));
+    assert.ok(html.includes('app-sidebar'));
+    assert.ok(html.includes('theme-toggle-btn'));
+    assert.ok(html.includes('data-theme="light"'));
     assert.ok(html.includes('pixel-room-canvas'));
     assert.ok(html.includes('team-room-grid'));
     assert.ok(html.includes('kanban-board'));
@@ -38,27 +41,33 @@ test('SupervisorServer serves interactive Web UI dashboard bundle', async (t) =>
     assert.ok(html.includes('view-observability'));
   });
 
-  await t.test('GET /pixel-room.js returns pixel-art isometric engine', async () => {
+  await t.test('GET /pixel-room.js returns pixel-art isometric engine with theme support', async () => {
     const res = await fetch(`${baseUrl}/pixel-room.js`);
     assert.equal(res.status, 200);
     assert.ok(res.headers.get('content-type').includes('application/javascript'));
     const js = await res.text();
     assert.ok(js.includes('PixelRoomRenderer'));
+    assert.ok(js.includes('setTheme'));
   });
 
-  await t.test('GET /app.js returns client-side dashboard application script', async () => {
+  await t.test('GET /app.js returns client-side dashboard application script with theme switching', async () => {
     const res = await fetch(`${baseUrl}/app.js`);
     assert.equal(res.status, 200);
     assert.ok(res.headers.get('content-type').includes('application/javascript'));
     const js = await res.text();
     assert.ok(js.includes('/api/v1/events'));
     assert.ok(js.includes('/api/v1/workspace'));
+    assert.ok(js.includes('agentcrew_theme'));
+    assert.ok(js.includes('theme-toggle-btn'));
   });
 
-  await t.test('GET /style.css returns dashboard stylesheets', async () => {
+  await t.test('GET /style.css returns dashboard stylesheets with light and dark themes', async () => {
     const res = await fetch(`${baseUrl}/style.css`);
     assert.equal(res.status, 200);
     assert.ok(res.headers.get('content-type').includes('text/css'));
+    const css = await res.text();
+    assert.ok(css.includes('[data-theme="light"]'));
+    assert.ok(css.includes('[data-theme="dark"]'));
   });
 
   await t.test('GET /non-existent-asset.xyz returns 404', async () => {

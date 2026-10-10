@@ -125,3 +125,10 @@ with PixelRoomRenderer: 6x6 isometric floor tiles, office walls, window skyline,
 water cooler, potted plants, server rack, 13 custom workstation desks with glowing screens,
 custom pixel avatars with role-themed attire, animated speech/activity bubbles,
 and interactive hover/click inspector. 50 tests passing green.
+
+Revamped Web UI dashboard with Impeccable design standards: left sidebar navigation
+with brand header and stream telemetry; dual theme support (light as default, dark
+toggleable) with CSS design tokens and localStorage persistence; theme-adaptive
+PixelRoomRenderer palettes (light parquet/office walls vs dark cyber-office); and
+creative free SVG vector icons throughout sidebar and full-screen view headers.
+All 50 unit and integration tests passing green.

@@ -29,6 +29,28 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  // Theme Management (Light Default, Dark Toggle, localStorage persisted)
+  const themeToggleBtn = document.getElementById('theme-toggle-btn');
+  const themeLabelText = document.getElementById('theme-label-text');
+
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    if (themeLabelText) {
+      themeLabelText.textContent = theme === 'dark' ? 'Theme: Dark' : 'Theme: Light';
+    }
+    if (pixelRenderer) {
+      pixelRenderer.setTheme(theme);
+    }
+    try {
+      localStorage.setItem('agentcrew_theme', theme);
+    } catch (_) {}
+  }
+
+  let initialTheme = 'light';
+  try {
+    initialTheme = localStorage.getItem('agentcrew_theme') || 'light';
+  } catch (_) {}
+
   const canvas = document.getElementById('pixel-room-canvas');
   const pixelWrapper = document.getElementById('pixel-room-wrapper');
   const btnTogglePixel = document.getElementById('toggle-pixel-view');
@@ -37,12 +59,25 @@ document.addEventListener('DOMContentLoaded', () => {
   let pixelRenderer = null;
   if (canvas && window.PixelRoomRenderer) {
     pixelRenderer = new PixelRoomRenderer(canvas, {
+      theme: initialTheme,
       onAgentClick: (agent) => {
         if (agentSelect) {
           agentSelect.value = agent.name;
         }
         log(`Inspecting ${agent.name} (${agent.role}) via isometric station`, 'system');
       }
+    });
+  }
+
+  // Apply initially resolved theme
+  applyTheme(initialTheme);
+
+  if (themeToggleBtn) {
+    themeToggleBtn.addEventListener('click', () => {
+      const current = document.documentElement.getAttribute('data-theme') || 'light';
+      const next = current === 'dark' ? 'light' : 'dark';
+      applyTheme(next);
+      log(`Switched interface theme to ${next}`, 'system');
     });
   }
 

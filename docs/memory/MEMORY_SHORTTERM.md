@@ -119,3 +119,9 @@ interactive Web UI single-page dashboard bundle in src/server/public/ with
 4x4 isometric Virtual Team Room, Kanban board, takeover console, and observability,
 and added `agentcrew server [port]` CLI command to bin/wizard.js and npm run server.
 All 49 unit, contract, and integration tests passing green.
+
+Implemented authentic 2.5D pixel-art isometric virtual room in `src/server/public/pixel-room.js`
+with PixelRoomRenderer: 6x6 isometric floor tiles, office walls, window skyline,
+water cooler, potted plants, server rack, 13 custom workstation desks with glowing screens,
+custom pixel avatars with role-themed attire, animated speech/activity bubbles,
+and interactive hover/click inspector. 50 tests passing green.

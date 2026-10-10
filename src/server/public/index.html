@@ -10,8 +10,22 @@
   <header class="app-header">
     <div class="brand">
       <span class="logo">⚡</span>
-      <h1>AgentCrew <span class="badge">Team Workspace v1</span></h1>
+      <h1>AgentCrew <span class="badge">AI Team Workspace</span></h1>
     </div>
+
+    <!-- Full-Screen Navigation Bar -->
+    <nav class="main-nav" aria-label="Main Navigation">
+      <button class="nav-tab active" data-view="view-team-room" id="nav-team-room">
+        🎮 1. Virtual Team Room
+      </button>
+      <button class="nav-tab" data-view="view-observability" id="nav-observability">
+        📊 2. Iteration Observability
+      </button>
+      <button class="nav-tab" data-view="view-kanban" id="nav-kanban">
+        📋 3. Iteration Tasks & Flow
+      </button>
+    </nav>
+
     <div class="header-controls">
       <div id="connection-status" class="status-indicator connected">
         <span class="dot"></span>
@@ -25,135 +39,242 @@
   </header>
 
   <main class="dashboard-container">
-    <!-- Top Row: Team Room and Metrics -->
-    <section class="dashboard-grid top-grid">
-      <!-- 4x4 Virtual Team Room -->
-      <div class="card team-room-card">
-        <div class="card-header">
-          <div>
-            <h2>Virtual Team Room (13 Identities)</h2>
-            <span class="subtitle">Pixel-art isometric office with live animated activity</span>
-          </div>
+    <!-- VIEW 1: Virtual Team Room (Full-Screen) -->
+    <section id="view-team-room" class="fullscreen-view active">
+      <div class="view-header">
+        <div>
+          <h2>Virtual Team Room (13 Identities)</h2>
+          <span class="subtitle">Pixel-art isometric office with real-time animated activity and spatial navigation</span>
+        </div>
+        <div class="view-controls">
           <div class="view-toggles">
             <button id="toggle-pixel-view" class="btn btn-sm btn-secondary active">🎮 Isometric View</button>
             <button id="toggle-list-view" class="btn btn-sm btn-secondary">📋 Roster List</button>
           </div>
         </div>
-        <div class="card-body room-body">
+      </div>
+
+      <div class="team-room-layout">
+        <!-- Main Canvas Stage -->
+        <div class="canvas-stage">
           <div id="pixel-room-wrapper" class="pixel-canvas-wrapper">
-            <canvas id="pixel-room-canvas" width="620" height="360"></canvas>
+            <canvas id="pixel-room-canvas" width="960" height="520"></canvas>
           </div>
           <div id="team-room-grid" class="isometric-grid" style="display: none;">
             <!-- 13 Stations populated by app.js as accessible fallback -->
           </div>
         </div>
-      </div>
 
-      <!-- Observability & Diagnostics -->
-      <div class="card metrics-card">
-        <div class="card-header">
-          <h2>Iteration Observability</h2>
-          <span class="subtitle">Evidence-linked delivery metrics</span>
-        </div>
-        <div class="card-body">
-          <div class="metrics-grid">
-            <div class="metric-box">
-              <span class="metric-value" id="metric-cycle-time">--</span>
-              <span class="metric-label">Avg Cycle Time (min)</span>
-            </div>
-            <div class="metric-box">
-              <span class="metric-value" id="metric-pass-rate">--</span>
-              <span class="metric-label">QA Pass Rate</span>
-            </div>
-            <div class="metric-box">
-              <span class="metric-value" id="metric-completed-tasks">--</span>
-              <span class="metric-label">Tasks Completed</span>
-            </div>
+        <!-- Integrated Takeover & Inspector Dock -->
+        <div class="takeover-dock card" id="takeover-panel">
+          <div class="card-header">
+            <h3>Session Takeover & Inspector</h3>
+            <span class="badge" id="takeover-state-badge">Auto</span>
           </div>
-          <div class="provider-readiness">
-            <h3>Provider Readiness (TRD §5)</h3>
-            <div id="provider-badges" class="provider-badges">
-              <!-- Populated dynamically -->
+          <div class="card-body">
+            <p class="section-desc">10-second soft budget pause to quiesce autonomous turns for human intervention.</p>
+            <div class="takeover-controls">
+              <div class="form-row">
+                <label for="takeover-agent-select">Target Agent:</label>
+                <select id="takeover-agent-select">
+                  <option value="Dev-1">Dev-1 (Developer / Codex)</option>
+                  <option value="Dev-2">Dev-2 (Developer / Codex)</option>
+                  <option value="Dev-3">Dev-3 (Developer / agy)</option>
+                  <option value="Dev-4">Dev-4 (Developer / agy)</option>
+                  <option value="Arthur">Arthur (Architect / Codex)</option>
+                  <option value="Alice">Alice (BA / agy)</option>
+                  <option value="Peter">Peter (PO / agy)</option>
+                  <option value="QA-1">QA-1 (Tester / Gemini)</option>
+                  <option value="QA-2">QA-2 (Tester / Gemini)</option>
+                  <option value="QA-3">QA-3 (Tester / agy)</option>
+                  <option value="QA-4">QA-4 (Tester / agy)</option>
+                  <option value="Integrator-1">Integrator-1 (Integrator / Codex)</option>
+                  <option value="Integrator-2">Integrator-2 (Integrator / agy)</option>
+                </select>
+              </div>
+              <div class="action-buttons">
+                <button id="btn-takeover" class="btn btn-warning">Initiate Takeover</button>
+                <button id="btn-release" class="btn btn-success" disabled>Release Takeover</button>
+              </div>
+            </div>
+            <div id="takeover-terminal" class="terminal-log">
+              <div class="term-line system">[System] Ready. Click any station in the isometric room to inspect.</div>
             </div>
           </div>
         </div>
       </div>
     </section>
 
-    <!-- Middle Row: Kanban Board -->
-    <section class="card kanban-card">
-      <div class="card-header">
-        <h2>Iteration Tasks & Flow</h2>
-        <span class="subtitle">Gated lifecycles (Design Review & Commit-Bound QA)</span>
+    <!-- VIEW 2: Iteration Observability (Full-Screen) -->
+    <section id="view-observability" class="fullscreen-view">
+      <div class="view-header">
+        <div>
+          <h2>Iteration Observability & Analytics</h2>
+          <span class="subtitle">Evidence-linked metrics, pass rates, provider qualification, and retrospective findings</span>
+        </div>
       </div>
-      <div class="card-body">
+
+      <div class="observability-dashboard">
+        <!-- KPI Row -->
+        <div class="kpi-grid">
+          <div class="kpi-card card">
+            <span class="kpi-label">Average Cycle Time</span>
+            <span class="kpi-value" id="metric-cycle-time">--</span>
+            <span class="kpi-desc">Minutes per task DoD delivery</span>
+          </div>
+          <div class="kpi-card card">
+            <span class="kpi-label">Independent QA Pass Rate</span>
+            <span class="kpi-value" id="metric-pass-rate">--</span>
+            <span class="kpi-desc">Revision-bound first-pass yield</span>
+          </div>
+          <div class="kpi-card card">
+            <span class="kpi-label">Tasks Delivered</span>
+            <span class="kpi-value" id="metric-completed-tasks">--</span>
+            <span class="kpi-desc">Cryptographically verified increments</span>
+          </div>
+          <div class="kpi-card card">
+            <span class="kpi-label">Global Turn Limit</span>
+            <span class="kpi-value">4</span>
+            <span class="kpi-desc">Max concurrent agent turns (TRD §7)</span>
+          </div>
+        </div>
+
+        <!-- Provider Qualification Matrix -->
+        <div class="card provider-card">
+          <div class="card-header">
+            <h3>Provider Qualification Matrix (TRD §5)</h3>
+            <span class="subtitle">Zero-credential local qualification gates</span>
+          </div>
+          <div class="card-body">
+            <div class="provider-matrix">
+              <div class="provider-box">
+                <div class="provider-header">
+                  <strong>agy (Anthropic / Claude)</strong>
+                  <span class="badge badge-success">Qualified</span>
+                </div>
+                <p>Flags: <code>-p --input-format stream-json --output-format stream-json --disable-slash-commands</code></p>
+                <div class="provider-caps">
+                  <span>Stream-JSON: Yes</span>
+                  <span>Permission Hooks: Yes</span>
+                  <span>Delegation Disabled: Yes</span>
+                </div>
+              </div>
+              <div class="provider-box">
+                <div class="provider-header">
+                  <strong>Codex (OpenAI app-server)</strong>
+                  <span class="badge badge-success">Qualified</span>
+                </div>
+                <p>Flags: <code>exec --json --cd &lt;dir&gt; -c features.multi_agent=false</code></p>
+                <div class="provider-caps">
+                  <span>JSONL Events: Yes</span>
+                  <span>Worktree Support: Yes</span>
+                  <span>Delegation Disabled: Yes</span>
+                </div>
+              </div>
+              <div class="provider-box">
+                <div class="provider-header">
+                  <strong>Gemini (Google)</strong>
+                  <span class="badge badge-success">Qualified</span>
+                </div>
+                <p>Flags: <code>-p --output-format stream-json --disable-delegation</code></p>
+                <div class="provider-caps">
+                  <span>Headless Stream: Yes</span>
+                  <span>Zero Network CI: Yes</span>
+                  <span>Delegation Disabled: Yes</span>
+                </div>
+              </div>
+            </div>
+            <div class="provider-readiness-footer">
+              <div id="provider-badges" class="provider-badges"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Post-Iteration Retrospective Report -->
+        <div class="card retro-card">
+          <div class="card-header">
+            <h3>Product Owner Retrospective Synthesis</h3>
+            <span class="subtitle">Automated diagnosis generated by PO Peter</span>
+          </div>
+          <div class="card-body">
+            <div class="retro-content">
+              <div class="retro-stat-line">
+                <strong>Iteration Goal:</strong> AI Team Workspace v1 Foundation & Engine Baseline
+              </div>
+              <div class="retro-stat-line">
+                <strong>Execution Status:</strong> <span class="badge badge-success">Delivered (100% Pass)</span>
+              </div>
+              <p class="retro-summary">
+                All 12 baseline milestone tasks completed through gated TDD lifecycles. Zero rework cycle escalations reached the Architect ceiling. Revision-bound QA signatures successfully protected candidate revisions from regression.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- VIEW 3: Iteration Tasks & Flow (Kanban) (Full-Screen) -->
+    <section id="view-kanban" class="fullscreen-view">
+      <div class="view-header">
+        <div>
+          <h2>Iteration Tasks & Flow (Kanban)</h2>
+          <span class="subtitle">Gated lifecycles with Architect Design Reviews & Commit-Bound QA approvals</span>
+        </div>
+        <div class="view-controls">
+          <button id="btn-new-popup" class="btn btn-warning btn-sm">+ Propose Scope Change (P-xxx)</button>
+        </div>
+      </div>
+
+      <!-- Full-Height Kanban Board -->
+      <div class="kanban-fullscreen-wrapper">
         <div id="kanban-board" class="kanban-board">
           <div class="kanban-col" data-stage="planning">
-            <div class="col-header">Planning</div>
+            <div class="col-header">
+              <span>1. Planning</span>
+              <span class="col-badge">Intake</span>
+            </div>
             <div class="col-tasks" id="tasks-planning"></div>
           </div>
           <div class="kanban-col" data-stage="in_progress">
-            <div class="col-header">In Progress</div>
+            <div class="col-header">
+              <span>2. In Progress</span>
+              <span class="col-badge">Worktree</span>
+            </div>
             <div class="col-tasks" id="tasks-in_progress"></div>
           </div>
           <div class="kanban-col" data-stage="review">
-            <div class="col-header">Architect Review</div>
+            <div class="col-header">
+              <span>3. Architect Review</span>
+              <span class="col-badge">Design Gate</span>
+            </div>
             <div class="col-tasks" id="tasks-review"></div>
           </div>
           <div class="kanban-col" data-stage="qa">
-            <div class="col-header">Independent QA</div>
+            <div class="col-header">
+              <span>4. Independent QA</span>
+              <span class="col-badge">Commit-Bound</span>
+            </div>
             <div class="col-tasks" id="tasks-qa"></div>
           </div>
           <div class="kanban-col" data-stage="done">
-            <div class="col-header">Done</div>
+            <div class="col-header">
+              <span>5. Done</span>
+              <span class="col-badge">Verified</span>
+            </div>
             <div class="col-tasks" id="tasks-done"></div>
           </div>
         </div>
       </div>
-    </section>
 
-    <!-- Bottom Row: Takeover Console and Scope Changes -->
-    <section class="dashboard-grid bottom-grid">
-      <!-- Human Takeover Console -->
-      <div class="card takeover-card" id="takeover-panel">
+      <!-- Scope Popups (P-xxx) Drawer -->
+      <div class="card popup-card" style="margin-top: 1.5rem;">
         <div class="card-header">
-          <h2>Browser Session Takeover</h2>
-          <span class="badge" id="takeover-state-badge">Auto</span>
-        </div>
-        <div class="card-body">
-          <p class="section-desc">10-second soft budget pause to quiesce autonomous turns for human intervention.</p>
-          <div class="takeover-controls">
-            <div class="form-row">
-              <label for="takeover-agent-select">Target Agent:</label>
-              <select id="takeover-agent-select">
-                <option value="Dev-1">Dev-1 (Developer / Codex)</option>
-                <option value="Dev-2">Dev-2 (Developer / Codex)</option>
-                <option value="Arthur">Arthur (Architect / Codex)</option>
-                <option value="Alice">Alice (BA / agy)</option>
-                <option value="Peter">Peter (PO / agy)</option>
-                <option value="QA-1">QA-1 (Tester / Gemini)</option>
-              </select>
-            </div>
-            <div class="action-buttons">
-              <button id="btn-takeover" class="btn btn-warning">Initiate Takeover</button>
-              <button id="btn-release" class="btn btn-success" disabled>Release Takeover</button>
-            </div>
-          </div>
-          <div id="takeover-terminal" class="terminal-log">
-            <div class="term-line system">[System] Ready. All 13 identities operational.</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Scope Popups (P-xxx) -->
-      <div class="card popup-card">
-        <div class="card-header">
-          <h2>Mid-Flight Scope Changes (P-xxx)</h2>
-          <button id="btn-new-popup" class="btn btn-sm btn-secondary">+ Propose Scope Change</button>
+          <h3>Active Mid-Flight Scope Changes (P-xxx Tickets)</h3>
+          <span class="subtitle">Impact analysis & operator sign-off before task resumption</span>
         </div>
         <div class="card-body">
           <div id="popup-list" class="popup-list">
-            <div class="empty-state">No active scope modification tickets.</div>
+            <div class="empty-state">No active scope modification tickets. Click "+ Propose Scope Change" to submit a mid-iteration change.</div>
           </div>
         </div>
       </div>

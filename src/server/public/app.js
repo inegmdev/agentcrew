@@ -46,6 +46,34 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // Full-Screen Navigation Tabs
+  const navTabs = document.querySelectorAll('.nav-tab');
+  const views = document.querySelectorAll('.fullscreen-view');
+
+  function switchView(targetViewId) {
+    views.forEach(v => {
+      if (v.id === targetViewId) {
+        v.classList.add('active');
+      } else {
+        v.classList.remove('active');
+      }
+    });
+
+    navTabs.forEach(t => {
+      if (t.dataset.view === targetViewId) {
+        t.classList.add('active');
+      } else {
+        t.classList.remove('active');
+      }
+    });
+  }
+
+  navTabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      switchView(tab.dataset.view);
+    });
+  });
+
   if (btnTogglePixel && btnToggleList) {
     btnTogglePixel.addEventListener('click', () => {
       btnTogglePixel.classList.add('active');
@@ -238,10 +266,46 @@ document.addEventListener('DOMContentLoaded', () => {
     };
   }
 
+  // Load Tasks into Kanban
+  async function loadTasks() {
+    const tasks = [
+      { id: 'TASK-13', title: 'Provider Qualification Spikes (agy, Codex, Gemini)', stage: 'done', owner: 'Arthur (Architect)' },
+      { id: 'TASK-14', title: 'Workspace SQLite Schema & 13 Agent Identities', stage: 'done', owner: 'Dev-1' },
+      { id: 'TASK-15', title: 'Provider Plugin Engine & 4-Turn Scheduler', stage: 'done', owner: 'Dev-2' },
+      { id: 'TASK-16', title: 'Browser Session Takeover with 10s Soft Budget', stage: 'done', owner: 'Dev-3' },
+      { id: 'TASK-17', title: 'Requirements Intake & Joint Planning Package', stage: 'review', owner: 'Alice (BA)' },
+      { id: 'TASK-18', title: 'Worktree Task Lifecycle & Design Reviews', stage: 'qa', owner: 'QA-1 (Tester)' },
+      { id: 'TASK-19', title: 'Commit-Bound Approvals & Revision Invalidation', stage: 'in_progress', owner: 'Dev-4' },
+      { id: 'TASK-20', title: 'Iteration Branch Integration Strategy', stage: 'in_progress', owner: 'Integrator-1' },
+      { id: 'TASK-21', title: 'Popup Scope Change Engine (P-xxx)', stage: 'planning', owner: 'Peter (PO)' },
+      { id: 'TASK-25', title: 'Supervisor HTTP & SSE Server Daemon', stage: 'done', owner: 'Dev-1' },
+      { id: 'TASK-26', title: 'Interactive Web UI Full-Screen Dashboards', stage: 'done', owner: 'Dev-2' },
+      { id: 'TASK-27', title: 'CLI Server Command & User Workflow', stage: 'done', owner: 'Dev-3' }
+    ];
+
+    ['planning', 'in_progress', 'review', 'qa', 'done'].forEach(stage => {
+      const col = document.getElementById(`tasks-${stage}`);
+      if (!col) return;
+      col.innerHTML = '';
+      const stageTasks = tasks.filter(t => t.stage === stage);
+      stageTasks.forEach(task => {
+        const item = document.createElement('div');
+        item.className = 'task-item';
+        item.innerHTML = `
+          <div class="task-id">${task.id}</div>
+          <div class="task-title" style="font-weight:600; font-size:0.85rem;">${task.title}</div>
+          <div class="task-owner" style="font-size:0.75rem; color:var(--text-muted);">${task.owner}</div>
+        `;
+        col.appendChild(item);
+      });
+    });
+  }
+
   // Initial Boot
   loadWorkspace();
   loadAgents();
   loadMetrics();
   loadReadiness();
+  loadTasks();
   connectSSE();
 });

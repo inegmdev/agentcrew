@@ -33,6 +33,9 @@ test('SupervisorServer serves interactive Web UI dashboard bundle', async (t) =>
     assert.ok(html.includes('team-room-grid'));
     assert.ok(html.includes('kanban-board'));
     assert.ok(html.includes('takeover-panel'));
+    assert.ok(html.includes('view-team-room'));
+    assert.ok(html.includes('view-kanban'));
+    assert.ok(html.includes('view-observability'));
   });
 
   await t.test('GET /pixel-room.js returns pixel-art isometric engine', async () => {

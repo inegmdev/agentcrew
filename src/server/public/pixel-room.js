@@ -9,11 +9,11 @@ class PixelRoomRenderer {
     this.ctx = canvas.getContext('2d');
     this.onAgentClick = options.onAgentClick || null;
 
-    this.tileW = 68;
-    this.tileH = 34;
+    this.tileW = 72;
+    this.tileH = 36;
     this.gridSize = 6;
     this.originX = canvas.width / 2;
-    this.originY = 110;
+    this.originY = 130;
 
     this.selectedAgent = null;
     this.hoveredAgent = null;

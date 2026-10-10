@@ -126,9 +126,38 @@ body {
 .subtitle {
   font-size: 0.8rem;
   color: var(--text-muted);
+.view-toggles {
+  display: flex;
+  gap: 0.4rem;
 }
 
-/* Isometric Team Room */
+.view-toggles .btn.active {
+  background-color: var(--accent-blue);
+  color: #0f172a;
+}
+
+/* Pixel-Art Isometric Room Canvas */
+.pixel-canvas-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #0f172a;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  padding: 0.5rem;
+  overflow: hidden;
+}
+
+#pixel-room-canvas {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  border-radius: 4px;
+  max-width: 100%;
+  height: auto;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+/* Isometric Team Room Fallback Grid */
 .isometric-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

@@ -29,11 +29,49 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  const canvas = document.getElementById('pixel-room-canvas');
+  const pixelWrapper = document.getElementById('pixel-room-wrapper');
+  const btnTogglePixel = document.getElementById('toggle-pixel-view');
+  const btnToggleList = document.getElementById('toggle-list-view');
+
+  let pixelRenderer = null;
+  if (canvas && window.PixelRoomRenderer) {
+    pixelRenderer = new PixelRoomRenderer(canvas, {
+      onAgentClick: (agent) => {
+        if (agentSelect) {
+          agentSelect.value = agent.name;
+        }
+        log(`Inspecting ${agent.name} (${agent.role}) via isometric station`, 'system');
+      }
+    });
+  }
+
+  if (btnTogglePixel && btnToggleList) {
+    btnTogglePixel.addEventListener('click', () => {
+      btnTogglePixel.classList.add('active');
+      btnToggleList.classList.remove('active');
+      if (pixelWrapper) pixelWrapper.style.display = 'flex';
+      if (teamRoomGrid) teamRoomGrid.style.display = 'none';
+    });
+
+    btnToggleList.addEventListener('click', () => {
+      btnToggleList.classList.add('active');
+      btnTogglePixel.classList.remove('active');
+      if (pixelWrapper) pixelWrapper.style.display = 'none';
+      if (teamRoomGrid) teamRoomGrid.style.display = 'grid';
+    });
+  }
+
   // Load Agent Stations
   async function loadAgents() {
     try {
       const res = await fetch('/api/v1/agents');
       const data = await res.json();
+
+      if (pixelRenderer && data.agents) {
+        pixelRenderer.updateAgentStates(data.agents);
+      }
+
       if (!teamRoomGrid) return;
       teamRoomGrid.innerHTML = '';
 

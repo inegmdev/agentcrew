@@ -30,12 +30,21 @@
       <!-- 4x4 Virtual Team Room -->
       <div class="card team-room-card">
         <div class="card-header">
-          <h2>Virtual Team Room (13 Identities)</h2>
-          <span class="subtitle">Isometric spatial layout & real-time activity</span>
+          <div>
+            <h2>Virtual Team Room (13 Identities)</h2>
+            <span class="subtitle">Pixel-art isometric office with live animated activity</span>
+          </div>
+          <div class="view-toggles">
+            <button id="toggle-pixel-view" class="btn btn-sm btn-secondary active">🎮 Isometric View</button>
+            <button id="toggle-list-view" class="btn btn-sm btn-secondary">📋 Roster List</button>
+          </div>
         </div>
-        <div class="card-body">
-          <div id="team-room-grid" class="isometric-grid">
-            <!-- 13 Stations populated by app.js -->
+        <div class="card-body room-body">
+          <div id="pixel-room-wrapper" class="pixel-canvas-wrapper">
+            <canvas id="pixel-room-canvas" width="620" height="360"></canvas>
+          </div>
+          <div id="team-room-grid" class="isometric-grid" style="display: none;">
+            <!-- 13 Stations populated by app.js as accessible fallback -->
           </div>
         </div>
       </div>
@@ -151,6 +160,7 @@
     </section>
   </main>
 
+  <script src="/pixel-room.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

@@ -23,15 +23,24 @@ test('SupervisorServer serves interactive Web UI dashboard bundle', async (t) =>
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  await t.test('GET / returns index.html with single-page dashboard shell', async () => {
+  await t.test('GET / returns index.html with single-page dashboard shell and pixel room canvas', async () => {
     const res = await fetch(`${baseUrl}/`);
     assert.equal(res.status, 200);
     assert.ok(res.headers.get('content-type').includes('text/html'));
     const html = await res.text();
     assert.ok(html.includes('AgentCrew — AI Team Workspace'));
+    assert.ok(html.includes('pixel-room-canvas'));
     assert.ok(html.includes('team-room-grid'));
     assert.ok(html.includes('kanban-board'));
     assert.ok(html.includes('takeover-panel'));
+  });
+
+  await t.test('GET /pixel-room.js returns pixel-art isometric engine', async () => {
+    const res = await fetch(`${baseUrl}/pixel-room.js`);
+    assert.equal(res.status, 200);
+    assert.ok(res.headers.get('content-type').includes('application/javascript'));
+    const js = await res.text();
+    assert.ok(js.includes('PixelRoomRenderer'));
   });
 
   await t.test('GET /app.js returns client-side dashboard application script', async () => {

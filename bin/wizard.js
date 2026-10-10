@@ -10,6 +10,10 @@ const { mergeAgentsMd } = require('../src/steps/mergeAgentsMd');
 const { installSkills } = require('../src/steps/installSkills');
 const { startDaemon } = require('../src/daemon');
 const { consolidate } = require('../src/daemon/consolidate');
+const { SupervisorServer } = require('../src/server/supervisor-server');
+const { WorkspaceManager } = require('../src/workspace/manager');
+const { TurnScheduler } = require('../src/scheduler/turn-scheduler');
+const { TakeoverController } = require('../src/session/takeover-controller');
 const state = require('../src/lib/state');
 
 async function setupProject(projectPath) {
@@ -109,8 +113,55 @@ function runConsolidate(projectPath) {
   console.log('  replace that file only if you agree with what was dropped.\n');
 }
 
+async function runServer(portArg, extraArgs = []) {
+  const port = parseInt(portArg, 10) || 3000;
+
+  let dir = path.join(process.env.HOME || '', '.agentcrew');
+  const dirIdx = extraArgs.indexOf('--dir');
+  if (dirIdx !== -1 && extraArgs[dirIdx + 1]) {
+    dir = path.resolve(extraArgs[dirIdx + 1]);
+  }
+
+  const workspace = new WorkspaceManager({ baseDir: dir });
+  const repoPath = process.cwd();
+
+  const project = await workspace.initProject({
+    repoPath,
+    name: path.basename(repoPath)
+  });
+
+  const scheduler = new TurnScheduler({ maxConcurrentTurns: 4 });
+  const takeoverController = new TakeoverController({ softBudgetMs: 10000 });
+
+  const server = new SupervisorServer({
+    port,
+    host: '127.0.0.1',
+    workspace,
+    projectId: project.id,
+    projectName: path.basename(repoPath),
+    scheduler,
+    takeoverController
+  });
+
+  await server.start();
+  console.log(`\n=== agentcrew server: ${path.basename(repoPath)} ===`);
+  console.log(`  Listening on http://127.0.0.1:${port}`);
+  console.log(`  Open http://127.0.0.1:${port} in your browser to view the AI Team Workspace.`);
+  console.log('  Press Ctrl-C to stop.\n');
+
+  const shutdown = async () => {
+    console.log('\n  Stopping supervisor server…');
+    await server.stop();
+    console.log('  Stopped.');
+    process.exit(0);
+  };
+
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
+}
+
 async function main() {
-  const [command, arg] = process.argv.slice(2);
+  const [command, arg, ...rest] = process.argv.slice(2);
 
   if (command === 'setup') {
     if (!arg) {
@@ -124,13 +175,16 @@ async function main() {
     runDaemon(arg);
   } else if (command === 'consolidate') {
     runConsolidate(arg);
+  } else if (command === 'server') {
+    await runServer(arg, rest);
   } else {
     console.log(
       'Usage:\n' +
         '  agentcrew setup <path-to-project>   Onboard a new project\n' +
         '  agentcrew update                    Re-run setup for every registered project\n' +
         '  agentcrew daemon [path]             Watch the board; journal and consolidate\n' +
-        '  agentcrew consolidate [path]        Propose a distilled MEMORY.md now\n'
+        '  agentcrew consolidate [path]        Propose a distilled MEMORY.md now\n' +
+        '  agentcrew server [port]             Run AI Team Workspace HTTP/SSE supervisor\n'
     );
   }
 }

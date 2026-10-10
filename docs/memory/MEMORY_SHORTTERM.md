@@ -111,3 +111,11 @@ limit, TakeoverController, RequirementsManager, TaskLifecycleManager with Archit
 gates, QualityVerificationManager with commit-bound approvals, IntegrationStrategyManager,
 PopupScopeChangeEngine, VirtualTeamRoom, ObservabilityEngine, and IterationRunner.
 All 31 unit, contract, and integration tests passing green.
+
+Executed full TDD implementation for milestone m-2 (TASK-25, TASK-26, TASK-27):
+built SupervisorServer HTTP/SSE daemon implementing TRD §12 (/api/v1/workspace,
+/readiness, /settings, /agents, /tasks, /popups, /metrics, /commands, /events),
+interactive Web UI single-page dashboard bundle in src/server/public/ with
+4x4 isometric Virtual Team Room, Kanban board, takeover console, and observability,
+and added `agentcrew server [port]` CLI command to bin/wizard.js and npm run server.
+All 49 unit, contract, and integration tests passing green.

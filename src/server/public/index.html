@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AgentCrew — AI Team Workspace</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <span class="logo">⚡</span>
+      <h1>AgentCrew <span class="badge">Team Workspace v1</span></h1>
+    </div>
+    <div class="header-controls">
+      <div id="connection-status" class="status-indicator connected">
+        <span class="dot"></span>
+        <span class="label">Connected (SSE)</span>
+      </div>
+      <div class="concurrency-badge">
+        <span>Concurrency:</span>
+        <strong id="concurrency-display">0 / 4 active turns</strong>
+      </div>
+    </div>
+  </header>
+
+  <main class="dashboard-container">
+    <!-- Top Row: Team Room and Metrics -->
+    <section class="dashboard-grid top-grid">
+      <!-- 4x4 Virtual Team Room -->
+      <div class="card team-room-card">
+        <div class="card-header">
+          <h2>Virtual Team Room (13 Identities)</h2>
+          <span class="subtitle">Isometric spatial layout & real-time activity</span>
+        </div>
+        <div class="card-body">
+          <div id="team-room-grid" class="isometric-grid">
+            <!-- 13 Stations populated by app.js -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Observability & Diagnostics -->
+      <div class="card metrics-card">
+        <div class="card-header">
+          <h2>Iteration Observability</h2>
+          <span class="subtitle">Evidence-linked delivery metrics</span>
+        </div>
+        <div class="card-body">
+          <div class="metrics-grid">
+            <div class="metric-box">
+              <span class="metric-value" id="metric-cycle-time">--</span>
+              <span class="metric-label">Avg Cycle Time (min)</span>
+            </div>
+            <div class="metric-box">
+              <span class="metric-value" id="metric-pass-rate">--</span>
+              <span class="metric-label">QA Pass Rate</span>
+            </div>
+            <div class="metric-box">
+              <span class="metric-value" id="metric-completed-tasks">--</span>
+              <span class="metric-label">Tasks Completed</span>
+            </div>
+          </div>
+          <div class="provider-readiness">
+            <h3>Provider Readiness (TRD §5)</h3>
+            <div id="provider-badges" class="provider-badges">
+              <!-- Populated dynamically -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Middle Row: Kanban Board -->
+    <section class="card kanban-card">
+      <div class="card-header">
+        <h2>Iteration Tasks & Flow</h2>
+        <span class="subtitle">Gated lifecycles (Design Review & Commit-Bound QA)</span>
+      </div>
+      <div class="card-body">
+        <div id="kanban-board" class="kanban-board">
+          <div class="kanban-col" data-stage="planning">
+            <div class="col-header">Planning</div>
+            <div class="col-tasks" id="tasks-planning"></div>
+          </div>
+          <div class="kanban-col" data-stage="in_progress">
+            <div class="col-header">In Progress</div>
+            <div class="col-tasks" id="tasks-in_progress"></div>
+          </div>
+          <div class="kanban-col" data-stage="review">
+            <div class="col-header">Architect Review</div>
+            <div class="col-tasks" id="tasks-review"></div>
+          </div>
+          <div class="kanban-col" data-stage="qa">
+            <div class="col-header">Independent QA</div>
+            <div class="col-tasks" id="tasks-qa"></div>
+          </div>
+          <div class="kanban-col" data-stage="done">
+            <div class="col-header">Done</div>
+            <div class="col-tasks" id="tasks-done"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Bottom Row: Takeover Console and Scope Changes -->
+    <section class="dashboard-grid bottom-grid">
+      <!-- Human Takeover Console -->
+      <div class="card takeover-card" id="takeover-panel">
+        <div class="card-header">
+          <h2>Browser Session Takeover</h2>
+          <span class="badge" id="takeover-state-badge">Auto</span>
+        </div>
+        <div class="card-body">
+          <p class="section-desc">10-second soft budget pause to quiesce autonomous turns for human intervention.</p>
+          <div class="takeover-controls">
+            <div class="form-row">
+              <label for="takeover-agent-select">Target Agent:</label>
+              <select id="takeover-agent-select">
+                <option value="Dev-1">Dev-1 (Developer / Codex)</option>
+                <option value="Dev-2">Dev-2 (Developer / Codex)</option>
+                <option value="Arthur">Arthur (Architect / Codex)</option>
+                <option value="Alice">Alice (BA / agy)</option>
+                <option value="Peter">Peter (PO / agy)</option>
+                <option value="QA-1">QA-1 (Tester / Gemini)</option>
+              </select>
+            </div>
+            <div class="action-buttons">
+              <button id="btn-takeover" class="btn btn-warning">Initiate Takeover</button>
+              <button id="btn-release" class="btn btn-success" disabled>Release Takeover</button>
+            </div>
+          </div>
+          <div id="takeover-terminal" class="terminal-log">
+            <div class="term-line system">[System] Ready. All 13 identities operational.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Scope Popups (P-xxx) -->
+      <div class="card popup-card">
+        <div class="card-header">
+          <h2>Mid-Flight Scope Changes (P-xxx)</h2>
+          <button id="btn-new-popup" class="btn btn-sm btn-secondary">+ Propose Scope Change</button>
+        </div>
+        <div class="card-body">
+          <div id="popup-list" class="popup-list">
+            <div class="empty-state">No active scope modification tickets.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

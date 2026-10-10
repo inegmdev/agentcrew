@@ -104,7 +104,27 @@ backlog task view TASK-1
 backlog task edit TASK-1 --status "In Progress"
 ```
 
-### Step 2: Run an Iteration with Your AI Team
+### Step 2: Start the Web Workspace Server
+
+Launch the supervisor daemon and open the interactive dashboard in your browser:
+
+```bash
+# Start server on default port 3000
+npm run server
+# or using the CLI directly
+agentcrew server 3000
+```
+
+Open **`http://127.0.0.1:3000`** in your browser to interact with:
+- **Virtual Team Room**: 4x4 isometric layout of 13 agent identities with real-time activity badges.
+- **Kanban Flow**: Live task lifecycle board tracking requirements through planning, development, architect review, and independent QA.
+- **Takeover Console**: Intervene in running agent sessions, inspect and authorize tools, and release back to autonomous scheduling with guidance notes.
+- **Observability Dashboard**: Cycle times, QA pass rates, and provider qualification readiness.
+- **Real-Time SSE Stream**: Automatic updates pushed over Server-Sent Events (`/api/v1/events`).
+
+---
+
+### Step 3: Run an Iteration with Your AI Team
 
 Run an automated development iteration driving the 13 agent identities:
 
@@ -134,7 +154,7 @@ console.log(result.deliveryEvidenceBundle);
 
 ---
 
-### Step 3: Interactive Browser Takeover
+### Step 4: Interactive Browser Takeover
 
 When an agent needs guidance or encounters an obstacle, you can take control of the session directly in your browser:
 
@@ -159,7 +179,7 @@ sequenceDiagram
 
 ---
 
-### Step 4: Mid-Flight Scope Changes (Popup Tickets)
+### Step 5: Mid-Flight Scope Changes (Popup Tickets)
 
 If customer requirements change while an iteration is active:
 1. The change request mints a Backlog popup ticket (`P-xxx`).
@@ -172,7 +192,7 @@ If customer requirements change while an iteration is active:
 
 ---
 
-### Step 5: Run the Watcher Daemon
+### Step 6: Run the Watcher Daemon
 
 The daemon monitors your Markdown task board and automates memory updates:
 

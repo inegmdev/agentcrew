@@ -37,7 +37,8 @@
     "setup": "node bin/wizard.js setup",
     "update": "node bin/wizard.js update",
     "daemon": "node bin/wizard.js daemon",
-    "consolidate": "node bin/wizard.js consolidate"
+    "consolidate": "node bin/wizard.js consolidate",
+    "test": "node --test \"test/**/*.test.js\""
   },
   "dependencies": {}
 }

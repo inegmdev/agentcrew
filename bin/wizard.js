@@ -14,6 +14,7 @@ const { SupervisorServer } = require('../src/server/supervisor-server');
 const { WorkspaceManager } = require('../src/workspace/manager');
 const { TurnScheduler } = require('../src/scheduler/turn-scheduler');
 const { TakeoverController } = require('../src/session/takeover-controller');
+const { IterationRunner } = require('../src/workflow/iteration-runner');
 const state = require('../src/lib/state');
 
 async function setupProject(projectPath) {
@@ -160,6 +161,29 @@ async function runServer(portArg, extraArgs = []) {
   process.on('SIGTERM', shutdown);
 }
 
+async function runIterate(goalArg, extraArgs) {
+  const repoPath = process.cwd();
+  console.log(`\n=== agentcrew iterate: ${path.basename(repoPath)} ===`);
+  const runner = new IterationRunner({
+    baseDir: path.join(repoPath, '.scratch')
+  });
+
+  const goal = goalArg || 'Deliver AI Team Workspace iteration';
+  console.log(`  Goal: ${goal}`);
+  console.log(`  Initializing 13 agent identities and running TDD cycles…`);
+
+  const result = await runner.runIteration({
+    repoPath,
+    iterationGoal: goal,
+    rawRequirements: 'id,title,priority\nREQ-01,Verify multi-turn workflows,high\nREQ-02,Commit-bound QA approvals,high'
+  });
+
+  console.log(`\n  Iteration finished with status: ${result.status}`);
+  console.log(`  Completed tasks: ${result.completedTasks ? result.completedTasks.length : 0}`);
+  console.log(`  Identities active: ${result.rosterCount}`);
+  console.log(`  Acceptance bundle: ${result.acceptanceChecklistPassed ? 'VERIFIED (100% pass yield)' : 'FAILED'}\n`);
+}
+
 async function main() {
   const [command, arg, ...rest] = process.argv.slice(2);
 
@@ -177,6 +201,8 @@ async function main() {
     runConsolidate(arg);
   } else if (command === 'server') {
     await runServer(arg, rest);
+  } else if (command === 'iterate') {
+    await runIterate(arg, rest);
   } else {
     console.log(
       'Usage:\n' +
@@ -184,7 +210,8 @@ async function main() {
         '  agentcrew update                    Re-run setup for every registered project\n' +
         '  agentcrew daemon [path]             Watch the board; journal and consolidate\n' +
         '  agentcrew consolidate [path]        Propose a distilled MEMORY.md now\n' +
-        '  agentcrew server [port]             Run AI Team Workspace HTTP/SSE supervisor\n'
+        '  agentcrew server [port]             Run AI Team Workspace HTTP/SSE supervisor\n' +
+        '  agentcrew iterate [goal]            Run automated 13-agent iteration cycle\n'
     );
   }
 }

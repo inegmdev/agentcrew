@@ -629,9 +629,13 @@ document.addEventListener('DOMContentLoaded', () => {
           body: JSON.stringify({ action: 'takeover', agent_id: agentId })
         });
         const result = await res.json();
-        log(`Takeover confirmed: ${agentId} is now HUMAN_OWNED (token: ${result.session.takeover_token.slice(0, 8)}...)`, 'success');
+        const token = (result.result && result.result.takeover_token) || (result.session && result.session.takeover_token) || 'tok-live';
+        log(`Takeover confirmed: ${agentId} is now HUMAN_OWNED (token: ${token.slice(0, 8)}...)`, 'success');
         stateBadge.textContent = 'Human Owned';
         btnRelease.disabled = false;
+        if (cmdInput) cmdInput.disabled = false;
+        if (btnSendCmd) btnSendCmd.disabled = false;
+        if (cmdInput) cmdInput.focus();
         loadAgents();
       } catch (err) {
         log(`Takeover failed: ${err.message}`, 'action');
@@ -654,10 +658,54 @@ document.addEventListener('DOMContentLoaded', () => {
         log(`Takeover released: ${agentId} returned to AUTO`, 'success');
         stateBadge.textContent = 'Auto';
         btnTakeover.disabled = false;
+        if (cmdInput) {
+          cmdInput.disabled = true;
+          cmdInput.value = '';
+        }
+        if (btnSendCmd) btnSendCmd.disabled = true;
         loadAgents();
       } catch (err) {
         log(`Release failed: ${err.message}`, 'action');
         btnRelease.disabled = false;
+      }
+    });
+  }
+
+  // Live Operator Command Execution during Takeover
+  const cmdInput = document.getElementById('takeover-command-input');
+  const btnSendCmd = document.getElementById('btn-send-command');
+
+  async function executeOperatorCommand() {
+    if (!cmdInput || !cmdInput.value.trim()) return;
+    const commandText = cmdInput.value.trim();
+    const agentId = agentSelect ? agentSelect.value : 'Dev-1';
+
+    log(`[Operator > ${agentId}]$ ${commandText}`, 'action');
+    cmdInput.value = '';
+
+    try {
+      const res = await fetch('/api/v1/commands', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          command_type: 'session.exec',
+          payload: { agent_id: agentId, command: commandText }
+        })
+      });
+      const data = await res.json();
+      if (data.result && data.result.output) {
+        log(data.result.output, 'success');
+      }
+    } catch (err) {
+      log(`Execution error: ${err.message}`, 'action');
+    }
+  }
+
+  if (btnSendCmd && cmdInput) {
+    btnSendCmd.addEventListener('click', executeOperatorCommand);
+    cmdInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        executeOperatorCommand();
       }
     });
   }

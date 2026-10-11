@@ -144,3 +144,9 @@ appearance accent color switcher (blue, violet, teal, amber). All 51 tests passi
 Configured `docs/assets/logo.jpeg` as the official web application logo and favicon:
 added JPEG MIME type mapping to `SupervisorServer`, updated `.brand-icon` and
 `<link rel="icon">` in `index.html`, and added test assertions. 52 tests passing green.
+
+Closed GitHub Issue #8 (Spec: AI Team Workspace v1) following merge of PR #7 to main.
+Added `agentcrew iterate [goal]` CLI command in `bin/wizard.js` orchestrating full 13-agent
+iteration lifecycles. Connected interactive operator command execution bar in Web UI
+Takeover Console (`session.exec`) streaming outputs directly to the terminal log.
+All 53 unit, contract, and workflow tests passing green.

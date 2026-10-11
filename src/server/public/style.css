@@ -851,6 +851,28 @@ select:focus, input.search-input:focus, textarea:focus {
 .term-line.action { color: #fbbf24; }
 .term-line.success { color: #4ade80; }
 
+.takeover-input-bar {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.65rem;
+}
+
+.takeover-input-bar input {
+  flex: 1;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-btn);
+  padding: 0.45rem 0.65rem;
+  font-size: 0.8rem;
+  outline: none;
+}
+
+.takeover-input-bar input:focus:not(:disabled) {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px var(--accent-primary-subtle);
+}
+
 /* Filter Pills */
 .filter-pills {
   display: flex;

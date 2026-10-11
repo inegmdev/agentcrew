@@ -91,3 +91,26 @@ test('agentcrew server CLI command launches supervisor and handles user workflow
     assert.ok(code === 0 || signal === 'SIGTERM');
   });
 });
+
+test('agentcrew iterate CLI command runs full 13-agent iteration cycle', async (t) => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agentcrew-cli-iterate-'));
+  const wizardBin = path.join(__dirname, '../../bin/wizard.js');
+
+  t.after(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  const proc = spawn(process.execPath, [wizardBin, 'iterate', 'Test Milestone Cycle'], {
+    cwd: tmpDir,
+    env: { ...process.env, HOME: tmpDir }
+  });
+
+  let output = '';
+  proc.stdout.on('data', (d) => { output += d.toString(); });
+  proc.stderr.on('data', (d) => { output += d.toString(); });
+
+  const code = await new Promise((res) => proc.on('exit', res));
+  assert.equal(code, 0);
+  assert.ok(output.includes('Iteration finished with status: delivered'));
+  assert.ok(output.includes('Identities active: 13'));
+});

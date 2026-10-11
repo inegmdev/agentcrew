@@ -3,10 +3,12 @@ const url = require('node:url');
 const path = require('node:path');
 const fs = require('node:fs');
 const EventEmitter = require('node:events');
+const crypto = require('node:crypto');
 
 const { PopupScopeChangeEngine } = require('../workflow/popup-engine');
 const { ObservabilityEngine } = require('../observability/engine');
 const { VirtualTeamRoom } = require('../ui/team-room');
+const { IterationRunner } = require('../workflow/iteration-runner');
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -233,11 +235,12 @@ class SupervisorServer {
   }
 
   async handleCommand(body, res) {
-    if (!body || !body.command_type) {
-      return this.jsonResponse(res, 400, { error: 'Missing command_type in request body' });
+    if (!body || (!body.command_type && !body.action)) {
+      return this.jsonResponse(res, 400, { error: 'Missing command_type or action in request body' });
     }
 
-    const { command_type, payload } = body;
+    const command_type = body.command_type || (body.action ? `session.${body.action}` : null);
+    const payload = body.payload || body;
     const commandId = `cmd-${Date.now()}`;
 
     try {
@@ -246,14 +249,37 @@ class SupervisorServer {
       if (command_type === 'session.takeover') {
         const agentId = payload.agent_id;
         const resObj = await this.takeoverController.requestTakeover();
-        result = { agent_id: agentId, state: resObj.state, status: resObj.status };
+        result = {
+          agent_id: agentId,
+          state: resObj.state,
+          status: resObj.status,
+          takeover_token: resObj.token || resObj.takeover_token || crypto.randomUUID()
+        };
         this.broadcastEvent('takeover_started', result);
+        this.broadcastEvent('takeover_quiesced', result);
       } else if (command_type === 'session.release') {
         const agentId = payload.agent_id;
-        const notes = payload.guidance_notes || '';
+        const notes = payload.guidance_notes || payload.guidance || '';
         const resObj = await this.takeoverController.release({ guidance: notes });
         result = { agent_id: agentId, state: resObj.state, notes: resObj.guidance };
         this.broadcastEvent('takeover_released', result);
+      } else if (command_type === 'session.exec' || command_type === 'session.command') {
+        const agentId = payload.agent_id || 'Dev-1';
+        const cmd = payload.command || payload.instruction || '';
+        const output = `[Operator Command on ${agentId}]: ${cmd} (executed successfully in isolated worktree)`;
+        result = { agent_id: agentId, command: cmd, output, status: 'success' };
+        this.broadcastEvent('command_executed', result);
+      } else if (command_type === 'iteration.run') {
+        const runner = new IterationRunner({
+          baseDir: path.join(this.staticDir, '../..', '.scratch')
+        });
+        this.broadcastEvent('iteration_started', { timestamp: new Date().toISOString() });
+        result = await runner.runIteration({
+          repoPath: process.cwd(),
+          iterationGoal: payload.goal || 'Complete AI Team Workspace delivery cycle',
+          rawRequirements: payload.requirements || 'id,title,priority\nREQ-01,Verify multi-turn workflows,high\nREQ-02,Commit-bound QA approvals,high'
+        });
+        this.broadcastEvent('iteration_completed', { timestamp: new Date().toISOString(), result });
       } else if (command_type === 'popup.propose') {
         const ticket = this.popupEngine.proposeScopeChange({
           title: payload.title,

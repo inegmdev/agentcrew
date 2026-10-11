@@ -217,3 +217,13 @@ Next-session todo (all in backlog, high first):
 - TASK-34 provider health/quota UX; readiness hardcodes "ready"
 - TASK-35 streaming replies + typing state
 - TASK-36 ops: LAN/cloudflared over localtunnel, CI workflow, no direct pushes to main
+
+Implemented TASK-30 (`feat/task-30-chatservice-plugin-scheduler`):
+- Extracted deep `ChatService` module (`src/chat/chat-service.js`) with PRD §6 role contracts (BA, PO, Architect, Developer, Tester, Integrator) and grounding in repo Git commits.
+- Enforced global 4-turn concurrency ceiling via `TurnScheduler.enqueue`.
+- Used `AgyAdapter` and `CodexAdapter.buildSpawnArgs()` directly with clean binary spawn in `PtyManager.executeCommand` without shell string concatenation.
+- Normalized Codex JSONL stream events supporting both `item.completed` and `item_completed`.
+- Safely handled provider model selection (avoiding invalid `gemini-2.5-pro` on `agy` and unsupported `o3` on ChatGPT accounts for `codex`, preserving automatic defaults).
+- Completely removed `generateAgentResponse` from `SupervisorServer` and delegated to `chatService.generateResponse`.
+- Added unit tests in `test/chat/chat-service.test.js`. All 62 unit and integration tests passing green.
+

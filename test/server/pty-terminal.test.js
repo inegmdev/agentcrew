@@ -66,18 +66,18 @@ test('SupervisorServer upgrades /api/v1/pty into interactive WebSocket terminal'
   await server.stop();
 });
 
-test('SupervisorServer generateAgentResponse generates persona responses for all agent roles', async () => {
+test('SupervisorServer chatService generates persona responses for all agent roles', async () => {
   const server = new SupervisorServer({ port: 3893, liveProviders: false });
   
-  const aliceRes = await server.generateAgentResponse('Alice', 'Hi');
+  const aliceRes = await server.chatService.generateResponse('Alice', 'Hi');
   assert.ok(aliceRes.includes('Alice'), `Expected Alice in ${aliceRes}`);
 
-  const arthurRes = await server.generateAgentResponse('Arthur', 'Hi');
+  const arthurRes = await server.chatService.generateResponse('Arthur', 'Hi');
   assert.ok(arthurRes.includes('Arthur'), `Expected Arthur in ${arthurRes}`);
 
-  const devRes = await server.generateAgentResponse('Dev-4', 'Hello');
+  const devRes = await server.chatService.generateResponse('Dev-4', 'Hello');
   assert.ok(devRes.includes('Dev-4'), `Expected Dev-4 in ${devRes}`);
 
-  const qaRes = await server.generateAgentResponse('QA-1', 'Hi');
-  assert.ok(qaRes.includes('QA-1') || qaRes.includes('test') || qaRes.includes('verification'), `Expected QA in ${qaRes}`);
+  const qaRes = await server.chatService.generateResponse('QA-1', 'Hi');
+  assert.ok(qaRes.includes('QA-1') || qaRes.includes('test') || qaRes.includes('verification') || qaRes.includes('Tester'), `Expected QA in ${qaRes}`);
 });

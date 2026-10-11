@@ -636,6 +636,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (cmdInput) cmdInput.disabled = false;
         if (btnSendCmd) btnSendCmd.disabled = false;
         if (cmdInput) cmdInput.focus();
+        connectPty(agentId);
         loadAgents();
       } catch (err) {
         log(`Takeover failed: ${err.message}`, 'action');
@@ -658,6 +659,7 @@ document.addEventListener('DOMContentLoaded', () => {
         log(`Takeover released: ${agentId} returned to AUTO`, 'success');
         stateBadge.textContent = 'Auto';
         btnTakeover.disabled = false;
+        disconnectPty();
         if (cmdInput) {
           cmdInput.disabled = true;
           cmdInput.value = '';
@@ -671,9 +673,65 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Live Operator Command Execution during Takeover
+  // --- Live WebSocket PTY Interface for Takeover ---
+  let ptySocket = null;
   const cmdInput = document.getElementById('takeover-command-input');
   const btnSendCmd = document.getElementById('btn-send-command');
+
+  function connectPty(agentId) {
+    if (ptySocket) {
+      try { ptySocket.close(); } catch (_) {}
+      ptySocket = null;
+    }
+
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = `${proto}//${window.location.host}/api/v1/pty?agent_id=${encodeURIComponent(agentId)}`;
+
+    try {
+      ptySocket = new WebSocket(wsUrl);
+
+      ptySocket.onopen = () => {
+        log(`[PTY] Connected interactive pseudo-terminal session for ${agentId}`, 'success');
+      };
+
+      ptySocket.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === 'ready') {
+            log(`[PTY Ready] Session ${msg.sessionId} spawned (cwd: ${msg.cwd})`, 'system');
+          } else if (msg.type === 'output') {
+            const raw = msg.data;
+            const lines = raw.split(/\r?\n/);
+            lines.forEach((line) => {
+              if (line.trim()) {
+                log(line);
+              }
+            });
+          }
+        } catch (_) {
+          log(event.data);
+        }
+      };
+
+      ptySocket.onclose = () => {
+        log(`[PTY] Session disconnected`, 'system');
+        ptySocket = null;
+      };
+
+      ptySocket.onerror = (err) => {
+        log(`[PTY Error] WebSocket connection failed`, 'action');
+      };
+    } catch (err) {
+      log(`[PTY Error] Unable to connect: ${err.message}`, 'action');
+    }
+  }
+
+  function disconnectPty() {
+    if (ptySocket) {
+      try { ptySocket.close(); } catch (_) {}
+      ptySocket = null;
+    }
+  }
 
   async function executeOperatorCommand() {
     if (!cmdInput || !cmdInput.value.trim()) return;
@@ -683,21 +741,26 @@ document.addEventListener('DOMContentLoaded', () => {
     log(`[Operator > ${agentId}]$ ${commandText}`, 'action');
     cmdInput.value = '';
 
-    try {
-      const res = await fetch('/api/v1/commands', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          command_type: 'session.exec',
-          payload: { agent_id: agentId, command: commandText }
-        })
-      });
-      const data = await res.json();
-      if (data.result && data.result.output) {
-        log(data.result.output, 'success');
+    if (ptySocket && ptySocket.readyState === WebSocket.OPEN) {
+      ptySocket.send(JSON.stringify({ type: 'input', data: `${commandText}\n` }));
+    } else {
+      // Fallback to HTTP command dispatch
+      try {
+        const res = await fetch('/api/v1/commands', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            command_type: 'session.exec',
+            payload: { agent_id: agentId, command: commandText }
+          })
+        });
+        const data = await res.json();
+        if (data.result && data.result.output) {
+          log(data.result.output, 'success');
+        }
+      } catch (err) {
+        log(`Execution error: ${err.message}`, 'action');
       }
-    } catch (err) {
-      log(`Execution error: ${err.message}`, 'action');
     }
   }
 

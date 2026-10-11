@@ -160,3 +160,16 @@ Created branch `feat/dogfooding-and-packaging` to support self-hosting / dogfood
 - Tested installation of packaged tarball (`agentcrew-0.5.0.tgz`) into an external isolated
   repository (`/tmp/external-agentcrew-test`): executed `npx agentcrew iterate` and verified
   `SupervisorServer` serves Web UI and `logo.jpeg` with HTTP 200. 54 tests passing green.
+
+Reconciled backlog and implemented WebSocket PTY interface on branch `feat/pty-terminal-and-cleanup`:
+- Reconciled obsolete September prototype tasks (TASK-1 through TASK-10) marking them Done
+  with label `superseded` and linking to Decision-7/8 and tasks TASK-13..27.
+- Built native RFC 6455 `WebSocketConnection` (`src/server/websocket.js`) with zero dependencies.
+- Built `PtyManager` (`src/session/pty-manager.js`) spawning interactive pseudo-terminal shells
+  and piping bidirectional stdin/stdout streams.
+- Upgraded `SupervisorServer` to accept WebSocket upgrade requests on `/api/v1/pty?agent_id=...`.
+- Integrated live WebSocket PTY streaming in Web UI Takeover Console (`src/server/public/app.js`),
+  attaching on takeover acquisition and disconnecting on release.
+- Created TASK-28 in backlog and verified all acceptance criteria.
+- Added comprehensive unit and contract tests in `test/server/pty-terminal.test.js`.
+- All 56 tests passing green.

@@ -1,12 +1,14 @@
 ---
 id: TASK-2
 title: Define the agentcrew event schema and forensics fields
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-19 16:17'
-updated_date: '2026-09-19 16:51'
+updated_date: '2026-10-11 00:58'
 labels:
   - schema
+  - obsolete
+  - superseded
 milestone: m-0
 dependencies:
   - TASK-10
@@ -56,3 +58,9 @@ All are fixed in §5. If the spike (task-1) found something §5 cannot express, 
 - [ ] #2 PRODUCT.md amended in the same commit if the build had to diverge from it, with the reason
 - [ ] #3 no new runtime dependency added to package.json
 <!-- DOD:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Superseded by October 2026 AI Team Workspace architecture (TASK-13 through TASK-27, Decision-7/8).
+<!-- SECTION:FINAL_SUMMARY:END -->

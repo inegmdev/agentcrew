@@ -140,3 +140,7 @@ SVG activity & commit chart, searchable repositories/worktrees grid, and
 Code Review queue with docked/sliding PR details panel (problem, approach, stats)
 and interactive AI Assistant Q&A composer with thinking shimmer. Added Settings
 appearance accent color switcher (blue, violet, teal, amber). All 51 tests passing green.
+
+Configured `docs/assets/logo.jpeg` as the official web application logo and favicon:
+added JPEG MIME type mapping to `SupervisorServer`, updated `.brand-icon` and
+`<link rel="icon">` in `index.html`, and added test assertions. 52 tests passing green.

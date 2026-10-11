@@ -43,6 +43,7 @@ test('SupervisorServer serves interactive Web UI dashboard bundle', async (t) =>
     assert.ok(html.includes('view-observability'));
     assert.ok(html.includes('view-settings'));
     assert.ok(html.includes('pr-details-panel'));
+    assert.ok(html.includes('logo.jpeg'));
   });
 
   await t.test('GET /pixel-room.js returns pixel-art isometric engine with theme support', async () => {
@@ -83,6 +84,12 @@ test('SupervisorServer serves interactive Web UI dashboard bundle', async (t) =>
     assert.ok(js.includes('agentCrewAnalyticsData'));
     assert.ok(js.includes('Arthur'));
     assert.ok(js.includes('TASK-26'));
+  });
+
+  await t.test('GET /logo.jpeg returns web app logo with image/jpeg mime type', async () => {
+    const res = await fetch(`${baseUrl}/logo.jpeg`);
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get('content-type'), 'image/jpeg');
   });
 
   await t.test('GET /non-existent-asset.xyz returns 404', async () => {

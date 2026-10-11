@@ -371,14 +371,29 @@ class SupervisorServer {
         this.broadcastEvent('takeover_released', result);
       } else if (command_type === 'session.exec' || command_type === 'session.command') {
         const agentId = payload.agent_id || 'Dev-1';
-        const cmd = payload.command || payload.instruction || '';
+        const cmd = (payload.command || payload.instruction || '').trim();
 
         let output = '';
-        try {
-          const execRes = await this.ptyManager.execute(cmd, { cwd: this.repoPath });
-          output = execRes.stdout || execRes.stderr || `[Executed with exit code ${execRes.code}]`;
-        } catch (e) {
-          output = `[Command Error on ${agentId}]: ${e.message}`;
+        const isShellCommand = /^(ls|cd|pwd|git|npm|node|cat|echo|mkdir|rm|cp|mv|grep|find|which|export|ps|kill|make|cargo|python|python3|agy|codex|gemini|touch|vi|nano|curl|wget)\b/i.test(cmd);
+
+        if (!isShellCommand && cmd.length > 0 && !cmd.startsWith('./') && !cmd.startsWith('/')) {
+          // Route dialogue directly to active Agent Persona reasoning
+          output = await this.generateAgentResponse(agentId, cmd);
+          this.broadcastEvent('agent_answered', {
+            agent_id: agentId,
+            pr_number: 'live',
+            question: cmd,
+            answer: output,
+            cli_grounded: true,
+            timestamp: new Date().toISOString()
+          });
+        } else {
+          try {
+            const execRes = await this.ptyManager.execute(cmd, { cwd: this.repoPath });
+            output = execRes.stdout || execRes.stderr || `[Executed with exit code ${execRes.code}]`;
+          } catch (e) {
+            output = `[Command Error on ${agentId}]: ${e.message}`;
+          }
         }
 
         result = { agent_id: agentId, command: cmd, output, status: 'success' };

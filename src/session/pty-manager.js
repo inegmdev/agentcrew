@@ -85,6 +85,9 @@ class PtyManager extends EventEmitter {
         stdio: ['pipe', 'pipe', 'pipe'],
       });
 
+      // One-shot command: signal EOF so tools that wait on piped stdin (e.g. `codex exec`) proceed.
+      child.stdin.end();
+
       let stdout = '';
       let stderr = '';
 

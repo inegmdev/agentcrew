@@ -568,51 +568,46 @@ class SupervisorServer {
     // Attempt real LLM CLI execution via installed agy or codex
     const promptInstructions = `You are ${agentId}, the ${agentRole} in an autonomous engineering team workspace. The repository has commit: ${gitInfo}. The human operator asks or says: "${prompt}". Answer concisely and authoritatively directly from your role's perspective (2-4 sentences max).`;
 
-    try {
-      if (!this.liveProviders) {
-        // offline mode: fall through to heuristic fallback
-      } else if (agentProvider === 'agy' && which('agy')) {
-        const cliRes = await this.ptyManager.execute(`agy --print ${JSON.stringify(promptInstructions)}`, { cwd: this.repoPath, timeoutMs: 15000 });
-        if (cliRes && cliRes.stdout && !cliRes.timedOut) {
-          const text = cliRes.stdout.trim();
-          return text.startsWith(agentId) ? text : `[${agentId} (${agentRole})]: ${text}`;
-        }
-      } else if (agentProvider === 'codex' && which('codex')) {
-        const cliRes = await this.ptyManager.execute(`codex exec ${JSON.stringify(promptInstructions)}`, { cwd: this.repoPath, timeoutMs: 15000 });
-        if (cliRes && cliRes.stdout && !cliRes.timedOut) {
-          const lines = cliRes.stdout.split('\n');
-          const codexIdx = lines.findIndex(l => l.trim() === 'codex');
-          let text = '';
-          if (codexIdx !== -1 && lines[codexIdx + 1]) {
-            text = lines.slice(codexIdx + 1).filter(l => !l.startsWith('tokens used') && !l.startsWith('--------')).join('\n').trim();
-          } else {
-            text = cliRes.stdout.trim();
+    const label = `[${agentId} (${agentRole})]`;
+    const runners = {
+      agy: async () => {
+        const r = await this.ptyManager.execute(`agy --print ${JSON.stringify(promptInstructions)}`, { cwd: this.repoPath, timeoutMs: 45000 });
+        return { ...r, text: (r.stdout || '').trim() };
+      },
+      codex: async () => {
+        const r = await this.ptyManager.execute(`codex exec ${JSON.stringify(promptInstructions)}`, { cwd: this.repoPath, timeoutMs: 60000 });
+        const lines = (r.stdout || '').split('\n');
+        const idx = lines.findIndex(l => l.trim() === 'codex');
+        const text = idx !== -1
+          ? lines.slice(idx + 1).filter(l => !l.startsWith('tokens used') && !/^[\d,]+$/.test(l.trim()) && !l.startsWith('--------')).join('\n').trim()
+          : (r.stdout || '').trim();
+        return { ...r, text };
+      }
+    };
+
+    // Agent's own provider first, then any other installed provider.
+    const order = [agentProvider, 'agy', 'codex'].filter((p, i, a) => runners[p] && a.indexOf(p) === i && which(p));
+    const errors = [];
+
+    if (this.liveProviders) {
+      for (const name of order) {
+        try {
+          const r = await runners[name]();
+          if (r.text && !r.timedOut && r.code === 0) {
+            return `${label}: ${r.text}`;
           }
-          return text.startsWith(agentId) ? text : `[${agentId} (${agentRole})]: ${text}`;
-        }
-      } else if (which('agy')) {
-        const cliRes = await this.ptyManager.execute(`agy --print ${JSON.stringify(promptInstructions)}`, { cwd: this.repoPath, timeoutMs: 15000 });
-        if (cliRes && cliRes.stdout && !cliRes.timedOut) {
-          const text = cliRes.stdout.trim();
-          return text.startsWith(agentId) ? text : `[${agentId} (${agentRole})]: ${text}`;
+          const why = r.timedOut ? 'timed out' : ((r.stderr || '').split('\n')[0] || `exit ${r.code}`);
+          errors.push(`${name}: ${why}`);
+        } catch (e) {
+          errors.push(`${name}: ${e.message}`);
         }
       }
-    } catch (_) {}
-
-    // Fallback heuristic response if CLI is unavailable or offline
-    const lower = prompt.toLowerCase();
-    const id = agentId.toLowerCase();
-
-    if (id.includes('alice')) {
-      if (lower.includes('hi') || lower.includes('hello')) {
-        return `[Alice (Business Analyst)]: Hello Operator! How can I assist the team today? ${gitInfo}`;
-      }
-      return `[Alice (Business Analyst)]: Noted "${prompt}". (offline fallback: provider CLI unavailable)`;
+      // Every real provider failed: say so honestly rather than faking a reply.
+      return `${label}: (no reply, every provider failed) ${errors.join(' | ')}`;
     }
-    if (id.includes('arthur')) {
-      return `[Arthur (Architect)]: Architectural assessment: Technical standards and modular seam boundaries are maintained ${gitInfo}.`;
-    }
-    return `[${agentId}]: Acknowledged "${prompt}". Processing task context in active worktree (${this.repoPath}).`;
+
+    // liveProviders=false (tests only): deterministic offline reply.
+    return `${label}: [offline] ${prompt}`;
   }
 }
 

@@ -9,6 +9,8 @@ const { PopupScopeChangeEngine } = require('../workflow/popup-engine');
 const { ObservabilityEngine } = require('../observability/engine');
 const { VirtualTeamRoom } = require('../ui/team-room');
 const { IterationRunner } = require('../workflow/iteration-runner');
+const { WebSocketConnection } = require('./websocket');
+const { PtyManager } = require('../session/pty-manager');
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -26,6 +28,7 @@ class SupervisorServer {
   constructor(options = {}) {
     this.port = options.port !== undefined ? options.port : 3000;
     this.host = options.host || '127.0.0.1';
+    this.repoPath = options.repoPath || process.cwd();
     this.workspace = options.workspace;
     this.projectId = options.projectId || null;
     this.projectName = options.projectName || 'AgentCrew Workspace';
@@ -35,9 +38,11 @@ class SupervisorServer {
     this.observability = options.observability || new ObservabilityEngine();
     this.teamRoom = options.teamRoom || new VirtualTeamRoom();
     this.staticDir = options.staticDir || path.join(__dirname, 'public');
+    this.ptyManager = options.ptyManager || new PtyManager({ cwd: this.repoPath });
 
     this.eventBus = options.eventBus || new EventEmitter();
     this.sseClients = new Set();
+    this.wsClients = new Set();
     this.cursorCounter = 0;
     this.httpServer = null;
     this.heartbeatInterval = null;
@@ -62,6 +67,10 @@ class SupervisorServer {
         });
       });
 
+      this.httpServer.on('upgrade', (req, socket, head) => {
+        this.handleUpgrade(req, socket, head);
+      });
+
       this.httpServer.on('error', reject);
 
       this.httpServer.listen(this.port, this.host, () => {
@@ -71,10 +80,75 @@ class SupervisorServer {
     });
   }
 
+  handleUpgrade(req, socket, head) {
+    const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+    if (parsedUrl.pathname === '/api/v1/pty') {
+      const ws = WebSocketConnection.accept(req, socket);
+      if (!ws) return;
+
+      this.wsClients.add(ws);
+      const agentId = parsedUrl.searchParams.get('agent_id') || 'Dev-1';
+      const ptySession = this.ptyManager.createSession({ sessionId: `pty-${agentId}-${Date.now()}` });
+
+      // Forward output from child process to WebSocket client
+      ptySession.child.stdout.on('data', (chunk) => {
+        ws.send(JSON.stringify({ type: 'output', data: chunk.toString('utf8') }));
+      });
+      ptySession.child.stderr.on('data', (chunk) => {
+        ws.send(JSON.stringify({ type: 'output', data: chunk.toString('utf8') }));
+      });
+
+      // Send initial greeting
+      ws.send(JSON.stringify({
+        type: 'ready',
+        sessionId: ptySession.id,
+        agentId,
+        cwd: ptySession.cwd
+      }));
+
+      // Forward user input from WebSocket client to child process stdin
+      ws.on('message', (msg) => {
+        try {
+          const parsed = typeof msg === 'string' ? JSON.parse(msg) : JSON.parse(msg.toString('utf8'));
+          if (parsed.type === 'input') {
+            ptySession.write(parsed.data);
+          } else if (parsed.type === 'resize') {
+            // resize event if available
+          }
+        } catch (_) {
+          ptySession.write(msg.toString());
+        }
+      });
+
+      ws.on('close', () => {
+        this.wsClients.delete(ws);
+        ptySession.kill();
+      });
+
+      ws.on('error', () => {
+        this.wsClients.delete(ws);
+        ptySession.kill();
+      });
+    } else {
+      socket.destroy();
+    }
+  }
+
   async stop() {
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
       this.heartbeatInterval = null;
+    }
+
+    for (const ws of this.wsClients) {
+      try {
+        ws.close();
+      } catch (_) {}
+    }
+    this.wsClients.clear();
+
+    if (this.ptyManager) {
+      this.ptyManager.killAll();
     }
 
     for (const client of this.sseClients) {

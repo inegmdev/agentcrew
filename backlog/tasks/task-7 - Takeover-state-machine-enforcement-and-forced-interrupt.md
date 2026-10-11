@@ -1,13 +1,15 @@
 ---
 id: TASK-7
 title: 'Takeover: state machine, enforcement, and forced interrupt'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-19 16:17'
-updated_date: '2026-09-19 16:51'
+updated_date: '2026-10-11 00:59'
 labels:
   - supervisor
   - ux
+  - obsolete
+  - superseded
 milestone: m-0
 dependencies:
   - TASK-4
@@ -56,3 +58,9 @@ hiding it.
 - [ ] #2 PRODUCT.md amended in the same commit if the build had to diverge from it, with the reason
 - [ ] #3 no new runtime dependency added to package.json
 <!-- DOD:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Superseded by October 2026 AI Team Workspace architecture (TASK-13 through TASK-27, Decision-7/8).
+<!-- SECTION:FINAL_SUMMARY:END -->

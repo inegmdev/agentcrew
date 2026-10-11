@@ -1,341 +1,248 @@
 # agentcrew
 
-A setup wizard that turns any git repo into one an agent can work
-autonomously — a task board, a memory layer, and a planning loop, wired
-together and installed with a single command.
+**Your local AI software team, from requirements to verified delivery.**
 
-```mermaid
-flowchart LR
-    A["Planning<br/>grill-me → to-prd → to-issues"] -->|"tickets"| B["You pick<br/>what's worth doing"]
-    B --> C["Board<br/>Backlog.md"]
-    D["Memory<br/>MEMORY.md + short-term log"] -.->|"read at start<br/>written at end"| C
-    E["GitHub Issues<br/>intake"] -->|"one-way"| C
-```
-
-## The rule everything here follows
-
-**No login walls. No hosted services in the critical path. Your data in a
-format you own.**
-
-This project previously used a board that required an account for local
-issue tracking, then shut down. It was open source — that wasn't enough.
-The question that matters is *"can this take my data with it when it dies?"*
-
-Everything here is markdown in your own repo. If every tool in this stack were
-abandoned tomorrow, you would lose some nice terminal UIs and keep every task,
-decision, and note.
-
-## What gets installed
-
-| Layer | Tool | Where your data lives |
-|---|---|---|
-| Board | [Backlog.md](https://github.com/MrLesk/Backlog.md) | `backlog/tasks/*.md` |
-| Memory | plain markdown | `docs/memory/` |
-| Decisions | `backlog decision` | `backlog/decisions/*.md` |
-| Planning | [mattpocock/skills](https://github.com/mattpocock/skills) | `.scratch/<feature>/` |
-
-No database. No server. No account.
-
-The supervisor now being designed adds a local event store outside your repo,
-which does not change that rule: intent stays as markdown you own, and the
-store holds transcripts and process history. See
-[Where this is going](#where-this-is-going).
-
-## Prerequisites
-
-- git, Node.js ≥ 18, npm
-- macOS, Linux, or Windows
-
-## Quickstart
-
-From inside the project you want to onboard:
-
-```bash
-npx github:inegmdev/agentcrew setup .
-```
-
-That's it. No clone, no npm account, nothing to publish — npx fetches
-straight from the public repo and runs it.
-
-If you'll use it often, install it once and drop the `npx`:
-
-```bash
-npm install -g github:inegmdev/agentcrew
-
-agentcrew setup .        # onboard the project you're standing in
-agentcrew update         # re-apply to every project you've onboarded
-agentcrew daemon .       # watch the board, keep memory current
-```
-
-Onboard as many projects as you like — `update` walks all of them.
-
-## What `setup` does
-
-1. Checks prerequisites and detects which agent CLIs you have (`claude`,
-   `gemini`, `kimi`, `codex`, `cursor-agent`).
-2. Installs Backlog.md and runs `backlog init`, which writes `CLAUDE.md`,
-   `AGENTS.md`, and `GEMINI.md`. Adds a **`Needs Attention`** status — the one
-   column that means "a human is needed", whether the work finished or got
-   stuck.
-3. Scaffolds the memory layer under `docs/memory/`: `MEMORY.md`,
-   `MEMORY_SHORTTERM.md`, and `archived/`. A pre-0.5 layout is migrated in
-   place — `docs/MEMORY.md` moves, and old `memory/*.md` logs become archived
-   sessions.
-4. Merges the agentcrew block into `AGENTS.md`, and reduces `CLAUDE.md` and
-   `GEMINI.md` to a one-line redirect to it. One file holds the rules, so
-   three copies can't drift apart. Rules you wrote by hand in either file are
-   folded into `AGENTS.md` first — nothing is dropped.
-5. Installs the planning skills.
-6. Registers the project in `~/.agentcrew/state.json`.
-
-Every step is idempotent. Re-running never duplicates a block, never
-overwrites an existing `MEMORY.md`, never deletes a log, and never touches
-your tasks.
-
-## One rules file
-
-```text
-AGENTS.md   ←  every rule lives here
-CLAUDE.md   →  "All agent rules live in @AGENTS.md — read that file."
-GEMINI.md   →  same one-liner
-```
-
-Claude Code and Gemini CLI both expand an `@file` reference, so the redirect
-loads the real rules rather than hoping the agent follows a hint. Editing
-`AGENTS.md` changes what every agent reads.
-
-## The memory layer
-
-Split by **retention**, not by topic — so what loads each session stays flat
-no matter how long the project runs. All of it lives in one directory:
-
-```text
-docs/memory/
-  MEMORY.md              long-term, distilled, ~200 lines
-  MEMORY_SHORTTERM.md    archive index + active `## YYYY-MM-DD` sections
-  archived/
-    session_YYYY_MM_DD.md   retired logs, whole and untouched
-```
-
-| Tier | Where | Loaded |
-|---|---|---|
-| long-term | `docs/memory/MEMORY.md` | every session (kept under ~200 lines) |
-| decisions | `backlog decision list` | on demand |
-| short-term | `docs/memory/MEMORY_SHORTTERM.md` | recent day sections only |
-| archives | `docs/memory/archived/` | on demand, for a past conversation |
-| tasks | `backlog task list` | on demand |
-
-Write to the short-term log freely — it's append-only, one `## YYYY-MM-DD`
-section per day. Consolidation then promotes anything still true in a month
-into `docs/memory/MEMORY.md` and drops the rest.
-
-### 🧹 Cleanup is archiving, not deletion
-
-When the short-term log gets long, old day sections are **moved**, never
-dropped:
-
-1. Move them into `docs/memory/archived/session_YYYY_MM_DD.md` — one file per
-   archived session, kept whole.
-2. Clear those sections from the short-term file's **Active logs**.
-3. Link the new file under its **Archive index**.
-
-Git would keep deleted logs too, but nobody ever goes looking there. A linked
-archive stays reachable, so past conversations survive with their full context
-while what loads each session stays small.
-
-## The daemon
-
-```bash
-agentcrew daemon /path/to/project
-```
-
-Watches the board and reacts to work moving across it, so the memory layer
-maintains itself:
-
-| Task moves to | Daemon does |
-|---|---|
-| any status | appends the transition under today's section in `MEMORY_SHORTTERM.md` |
-| `Needs Attention` | prints a notification — a human is wanted |
-| `Done` | runs a consolidation pass |
-
-Consolidation is also available on demand:
-
-```bash
-agentcrew consolidate /path/to/project
-```
-
-**It writes `docs/memory/MEMORY.proposed.md` and never overwrites `MEMORY.md`.**
-That asymmetry is deliberate: appending to a log is safe, but consolidation
-is *lossy by design* — it drops what didn't earn its place. An agent silently
-rewriting your accumulated knowledge is the one failure here that would be
-expensive and hard to notice, so a human accepts it.
-
-The daemon holds no state of its own. Everything it produces is a file in
-your repo, so stopping it loses automation, never data — which is the only
-reason it's allowed to exist.
-
-This follows [OpenClaw's memory model](https://docs.openclaw.ai/concepts/memory).
-Cline's Memory Bank is the better-known alternative, but it splits by topic
-and reads every file on every task — which gets more expensive as a project
-grows, rather than staying flat.
-
-## Tasks vs. GitHub issues
-
-```text
-GitHub Issues  →  intake. Bugs, requests, anything a human files.
-      │
-      │  one-way, manual, when you decide to work it
-      ↓
-Backlog.md     →  execution. In-repo, offline, versioned with the code.
-```
-
-Nothing syncs back. Two systems that both claim to know "what's being worked
-on" will eventually disagree, and then neither can be trusted.
-
-## Known manual steps (deliberate, not gaps)
-
-- **`/setup-matt-pocock-skills`** — a prompt-driven skill. It reads your repo
-  and makes judgment calls; that needs an LLM, not a shell script.
-- **Filling in `docs/memory/MEMORY.md`** — the wizard creates the file with a
-  template. What goes in it is yours to write.
-- **Archiving the short-term log** — which conversation is over, and where one
-  session's context ends, is a judgment call. The workflow is written into
-  every onboarded repo's agent instructions, so your agent can do it on
-  request; nothing archives on a timer.
-
-## Where this is going
-
-agentcrew is growing from an installer into a **supervisor**: it will own agent
-sessions rather than firing them and hoping. The requirement that drives it is
-human takeover — you watch the board, see an agent stuck, and take the wheel
-mid-task. You cannot do that with a session another program owns.
-
-### The loop it is built around
-
-```mermaid
-sequenceDiagram
-    actor Dev as You
-    participant Board as Board
-    participant Sup as Supervisor
-    participant CLI as Agent CLI
-    participant Store as Event store
-
-    Dev->>Board: promote a task
-    Board->>Sup: intent
-    Sup->>CLI: spawn with a minted session id
-    Sup->>Board: status becomes In Progress
-    CLI-->>Sup: stream of events
-    Sup->>Store: append every event
-
-    Note over CLI: the agent hits a wall
-    CLI-->>Sup: hook push, agent_needs_input
-    Sup->>Store: health becomes waiting_for_input
-    Sup-->>Dev: surfaced on the board
-
-    alt a nudge is enough
-        Sup->>CLI: resume with guidance
-    else a human is needed
-        Dev->>Sup: take over
-        Sup->>CLI: deny further tool calls
-        Dev->>CLI: drive the session directly
-        Dev->>Sup: release
-    end
-
-    CLI-->>Sup: result
-    Sup->>Store: ended_by completed
-    Sup->>Board: status becomes Done
-```
-
-Intent flows one way, from the board into a session. Only coarse status comes
-back, written by a single writer, so the two can never disagree about what is
-being worked on.
-
-### Where each kind of data lives
+agentcrew turns any Git repository into an autonomous AI Team Workspace where one operator directs 13 persistent agent identities across an iteration: plan, build with TDD, independently verify, integrate, track scope changes, and take the wheel in real-time.
 
 ```mermaid
 flowchart TB
-    subgraph git["In your repo, versioned in git"]
-        T["backlog/tasks/*.md<br/>intent"]
-        D["backlog/decisions/*.md"]
-        M["docs/memory/<br/>long-term and short-term"]
+    H["Human Operator<br/>Set goals · Approve plans · Take control"]
+
+    subgraph UI["Executive Dashboard Suite"]
+        K["Kanban<br/>Tasks · Stages · Blockers · Popups"]
+        R["Virtual Team Room<br/>13 Agent Stations · Real-time status"]
+        O["Observability<br/>Cycle times · Stacked utilization · Retrospectives"]
     end
 
-    subgraph home["Outside the repo, under ~/.agentcrew"]
-        REG["registry<br/>id, path, port, pid"]
-        DB[("per-project SQLite<br/>events, sessions, processes")]
-        BLOB["blobs/<br/>large tool payloads"]
+    subgraph TEAM["AI Software Team (13 Identities · 4 Max Concurrent Turns)"]
+        BA["Business Analyst (1)"] --> PO["Product Owner (1)"]
+        PO --> AR["Architect (1)"]
+        AR <--> DEV["4 Developers (TDD Worktrees)"]
+        DEV --> QA["4 Testers (Independent DoD)"]
+        QA --> INT["2 Integrators (PRs & Merges)"]
     end
 
-    subgraph run["Running"]
-        SUP["Supervisor<br/>one daemon per project"]
-        AD["Adapter<br/>claude, agy, gemini, mock"]
-        RT["Runtime<br/>local, worktree, docker, ssh"]
-        AG["Agent CLI process"]
-    end
+    REQ["Requirements<br/>Markdown · CSV"] --> BA
+    H <--> UI
+    UI <--> TEAM
+    INT --> V["Verified Product Increment<br/>Evidence bundle · Clean branch"]
 
-    UI["Web UI"]
-
-    T -->|"intent"| SUP
-    SUP -->|"coarse status only"| T
-    SUP --> AD --> RT --> AG
-    AG -->|"stream-json"| AD
-    AG -->|"hook pushes"| SUP
-    AD -->|"normalised events"| SUP
-    SUP -->|"small rows"| DB
-    SUP -->|"payloads over the row cap"| BLOB
-    DB -.->|"hash reference"| BLOB
-    SUP --> REG
-    SUP -->|"day sections"| M
-    UI -->|"read only"| DB
-    UI -->|"discovers projects"| REG
+    M["Durable Project Knowledge<br/>Markdown in your repository"] <--> TEAM
+    S[("Local Event Store<br/>~/.agentcrew/projects/<id>/agentcrew.db")] <--> UI
 ```
 
-Tasks, decisions and memory are intent: hand-edited, reviewed, and yours in
-markdown. Transcripts, process rows and heartbeats are events: append-only,
-machine-queried, and far too chatty for git. The store sits outside the repo
-because `git clean -xdf` would delete it.
+---
 
-What that means in practice:
+## The Rule Everything Follows
 
-| Piece | Shape |
+**No mandatory agentcrew account or hosted cloud control plane. Your durable data remains in formats you own.**
+
+- **Durable knowledge stays in your repository**: Tasks (`backlog/tasks/`), ADRs (`backlog/decisions/`), rules (`AGENTS.md`), memory (`docs/memory/`), and requirements live in plain, version-controlled Markdown.
+- **Execution state stays local**: Transcripts, normalized event streams, and process states live in your local SQLite store (`~/.agentcrew/projects/<id>/agentcrew.db`).
+- **Official CLI binaries**: Connects directly to your installed `agy`, `Codex`, and `Gemini` tools without reverse-engineered proxies or credential leaking.
+
+---
+
+## Prerequisites
+
+- **Node.js**: Node.js ≥ 22 (recommended Node 24 for built-in `node:sqlite`)
+- **Git**: Installed and accessible in PATH
+- **Agent CLIs** (at least one installed):
+  - [Antigravity CLI (`agy`)](https://github.com)
+  - [OpenAI Codex (`codex`)](https://github.com)
+  - [Gemini CLI (`gemini`)](https://github.com)
+- **OS**: Linux, macOS, or Windows
+
+---
+
+## Quickstart
+
+### 1. Onboard a Repository
+
+From inside the Git repository you want to turn into an AI Team Workspace:
+
+```bash
+# Quick run without global installation
+npx github:inegmdev/agentcrew setup .
+```
+
+Or install globally:
+
+```bash
+npm install -g github:inegmdev/agentcrew
+agentcrew setup .
+```
+
+`setup` performs the following steps:
+1. Detects available agent CLIs (`agy`, `codex`, `gemini`, etc.).
+2. Initializes the Backlog task board (`backlog/tasks/`) and decisions registry (`backlog/decisions/`).
+3. Scaffolds the memory architecture (`docs/memory/MEMORY.md`, `MEMORY_SHORTTERM.md`).
+4. Configures single-rules enforcement in `AGENTS.md` (redirecting `CLAUDE.md` and `GEMINI.md`).
+5. Installs planning skills (`grill-me`, `to-spec`, `to-tickets`, `tdd`).
+6. Registers the workspace in `~/.agentcrew/state.json`.
+
+---
+
+## How to Use agentcrew
+
+### Step 1: Manage Tasks with the Backlog Board
+
+agentcrew uses offline Markdown task boards versioned right alongside your code:
+
+```bash
+# List tasks and status
+backlog task list
+
+# Create a task with Definition of Done
+backlog task create "Implement JWT Auth" \
+  --ac "Tokens expire after 1 hour" \
+  --ac "Refresh tokens supported" \
+  --priority "High"
+
+# View or edit tasks
+backlog task view TASK-1
+backlog task edit TASK-1 --status "In Progress"
+```
+
+### Step 2: Start the Web Workspace Server
+
+Launch the supervisor daemon and open the interactive dashboard in your browser:
+
+```bash
+# Start server on default port 3000
+npm run server
+# or using the CLI directly
+agentcrew server 3000
+```
+
+Open **`http://127.0.0.1:3000`** in your browser to interact with:
+- **Virtual Team Room**: 4x4 isometric layout of 13 agent identities with real-time activity badges.
+- **Kanban Flow**: Live task lifecycle board tracking requirements through planning, development, architect review, and independent QA.
+- **Takeover Console**: Intervene in running agent sessions, inspect and authorize tools, and release back to autonomous scheduling with guidance notes.
+- **Observability Dashboard**: Cycle times, QA pass rates, and provider qualification readiness.
+- **Real-Time SSE Stream**: Automatic updates pushed over Server-Sent Events (`/api/v1/events`).
+
+---
+
+### Step 3: Run an Iteration with Your AI Team
+
+Run an automated development iteration driving the 13 agent identities:
+
+```javascript
+const { IterationRunner } = require('agentcrew/src/workflow/iteration-runner');
+
+const runner = new IterationRunner();
+const result = await runner.runIteration({
+  repoPath: process.cwd(),
+  iterationGoal: 'Sprint 1: User Authentication & Reporting',
+  rawRequirements: `id,title,description
+REQ-01,User Auth,Email and password login with session cookies
+REQ-02,CSV Export,Export user activity logs to CSV format`,
+});
+
+console.log(result.status); // "delivered"
+console.log(result.deliveryEvidenceBundle);
+```
+
+#### What happens during the iteration:
+1. **Intake & Planning**: The Business Analyst parses requirements, while the Product Owner and Architect produce task Definitions of Done and an integrated acceptance checklist.
+2. **Operator Approval**: You approve the baseline planning package.
+3. **TDD Development**: Developers claim tasks in isolated Git worktrees (`.worktrees/task-N`) and submit design proposals. The Architect reviews designs with automatic escalation after 2 failed rework cycles.
+4. **Independent QA**: Testers independently verify candidate commits against the task DoD. Approvals are cryptographically bound to specific Git commit hashes—any code change automatically invalidates prior approvals.
+5. **Integration & PRs**: Integrators combine branches (using either an `iteration/<id>` branch or direct task PRs) and run verification checks.
+6. **Delivery**: The complete increment is verified against the acceptance checklist, and a retrospective report is produced for the Product Owner.
+
+---
+
+### Step 4: Interactive Browser Takeover
+
+When an agent needs guidance or encounters an obstacle, you can take control of the session directly in your browser:
+
+```mermaid
+sequenceDiagram
+    actor Operator as Human Operator
+    participant UI as Dashboard / Browser
+    participant Supervisor as Session Supervisor
+    participant Agent as CLI Agent Process
+
+    Operator->>UI: Click "Take Over"
+    UI->>Supervisor: Request takeover
+    Supervisor->>Agent: Send interrupt (10-second soft budget)
+    Agent-->>Supervisor: Turn quiesced
+    Supervisor-->>UI: State becomes "human_owned"
+    Note over Operator,UI: Autonomous turns & nudges paused
+    Operator->>UI: Drive prompts directly / Authorize tool calls
+    UI->>Agent: Human-directed command execution
+    Operator->>UI: Click "Release" with guidance
+    Supervisor-->>Agent: Revalidate assignment & resume autonomous flow
+```
+
+---
+
+### Step 5: Mid-Flight Scope Changes (Popup Tickets)
+
+If customer requirements change while an iteration is active:
+1. The change request mints a Backlog popup ticket (`P-xxx`).
+2. The Product Owner compiles an **Impact Analysis** detailing:
+   - Affected tasks and requirements
+   - Reusable work vs. discarded work
+   - Estimated delay and additional effort
+3. Affected tasks are paused while unaffected work proceeds.
+4. The operator reviews and signs off on the revised commitment before work unpauses.
+
+---
+
+### Step 6: Run the Watcher Daemon
+
+The daemon monitors your Markdown task board and automates memory updates:
+
+```bash
+agentcrew daemon .
+```
+
+- When any task updates, it logs the event under today's date in `docs/memory/MEMORY_SHORTTERM.md`.
+- When a task reaches `Needs Attention`, it alerts you that a human decision is needed.
+- When a task reaches `Done`, it triggers a memory consolidation proposal to `docs/memory/MEMORY.proposed.md`.
+
+Run consolidation on demand at any time:
+
+```bash
+agentcrew consolidate .
+```
+
+---
+
+## Running the Automated Test Suite
+
+agentcrew includes a complete zero-credential test suite using Node's built-in `node:test` and `node:assert`:
+
+```bash
+npm test
+```
+
+This verifies:
+- Adapter contracts for `agy`, `Codex`, and `Gemini` with `disable_native_delegation` enforcement.
+- Deterministic fixture playback via `MockCLI`.
+- 13-agent roster initialization in SQLite.
+- Turn scheduler 4-turn global concurrency limits.
+- Browser session takeover state machine and timing budgets.
+- Requirements parsing and SHA-256 evidence hashing.
+- Worktree allocations and 2-rework Architect escalation gates.
+- QA commit-hash binding and invalidation logic.
+- Branch integration strategies (`iteration_branch` vs `task_prs`) and merge gates.
+- Popup ticket impact analysis and task pausing.
+- Isometric virtual team room layout and accessible status lists.
+- Observability metrics (cycle times, stacked utilization, and retrospectives).
+- End-to-end iteration delivery runs.
+
+---
+
+## Documentation & Architecture References
+
+| Document | Description |
 |---|---|
-| Adapters | one per CLI, normalising into agentcrew's own event schema |
-| Runtimes | local first; git worktree, docker and ssh are the same seam later |
-| Health | hook pushes, then deterministic signals, then an LLM watchdog, with a wall clock underneath |
-| Takeover | a state machine, enforced by denying the agent's tool calls while a human holds it |
-| Archive | every conversation and process, with what started it and what ended it |
-
-Two rules it will not bend. **No vendor credential is ever handled, forwarded
-or proxied** — the official binaries authenticate themselves, and nothing is
-exposed on a port. And **no vendor credentials in CI**: tests run against
-mocked CLIs and recorded fixtures, so the suite works on a fork with no secrets
-configured.
-
-The full specification, including the event model, the health tiers, the
-takeover protocol and the storage layout, is in [`PRODUCT.md`](PRODUCT.md).
-It is normative: every task on the board cites it by section. The reasoning
-behind it, including what was rejected and why, is in
-[`backlog/decisions/`](backlog/decisions/). Start at `decision-3`.
-
-## Status
-
-The board, memory layer, and daemon all work and are verified against real
-installs. The supervisor above is **designed, not built** — it sits on the
-board as the `Supervisor v1` milestone, `task-1` through `task-10`.
-
-Two things start it, and they run in parallel. `task-10` is a clickable
-mockup, so the screens can be argued about before anything is built. `task-1`
-is a protocol spike against the real CLIs, because one mechanism the design
-depends on is undocumented for the raw CLI. Everything else waits on one of
-them.
-
-Not yet built: worktree isolation and agent launching. Moving a task to
-`In Progress` is journalled but does not yet spin up a worktree and start an
-agent in it.
-
-Only Claude Code's headless flag (`-p`) has been verified first-hand; the
-other agents' flags are best-effort defaults and are marked as unverified in
-`src/daemon/agents.js`. Gemini CLI is kept deliberately for locked-down
-corporate machines even though Google retired it for the consumer tiers, and
-ships marked unverified. See `docs/memory/MEMORY.md` for the full
-verified/unverified split.
+| [Product Requirements Document (PRD)](docs/PRD.md) | 54 numbered requirements, 13-agent contracts, approval presets, dashboard suite, and 16 acceptance test scenarios. |
+| [Technical Requirements Document (TRD)](docs/TRD.md) | Technical architecture, `ProviderPlugin` interface, SQLite schemas, turn scheduler, and takeover protocols. |
+| [Product Compatibility Map (PRODUCT.md)](PRODUCT.md) | Legacy supervisor section anchor mappings. |
+| [Architectural Decision Records (ADRs)](backlog/decisions/) | Accepted design rationale (`decision-1` through `decision-8`). |
+| [Project Memory](docs/memory/MEMORY.md) | Distilled project memory and load-bearing constraints. |

@@ -125,6 +125,28 @@ test('SupervisorServer serves TRD §12 API routes and SSE stream', async (t) => 
     assert.equal(listData.popups.length, 1);
   });
 
+  await t.test('POST /api/v1/commands executes agent.ask and returns agent answer', async () => {
+    const askRes = await fetch(`${baseUrl}/api/v1/commands`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        command_type: 'agent.ask',
+        payload: {
+          agent_id: 'Arthur (Architect)',
+          pr_number: 26,
+          pr_title: 'Interactive Web UI',
+          question: 'What is the architectural blast radius?',
+          author: 'Dev-2'
+        }
+      })
+    });
+    assert.equal(askRes.status, 200);
+    const askData = await askRes.json();
+    assert.equal(askData.status, 'acknowledged');
+    assert.ok(askData.result.answer.includes('Architectural Assessment'));
+    assert.equal(askData.result.pr_number, 26);
+  });
+
   await t.test('GET /api/v1/metrics returns cycle time and utilization metrics', async () => {
     const res = await fetch(`${baseUrl}/api/v1/metrics`);
     assert.equal(res.status, 200);

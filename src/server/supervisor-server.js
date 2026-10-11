@@ -11,6 +11,8 @@ const { VirtualTeamRoom } = require('../ui/team-room');
 const { IterationRunner } = require('../workflow/iteration-runner');
 const { WebSocketConnection } = require('./websocket');
 const { PtyManager } = require('../session/pty-manager');
+const { TurnScheduler } = require('../scheduler/turn-scheduler');
+const { ChatService } = require('../chat/chat-service');
 const { which } = require('../lib/shell');
 
 const MIME_TYPES = {
@@ -33,7 +35,7 @@ class SupervisorServer {
     this.workspace = options.workspace;
     this.projectId = options.projectId || null;
     this.projectName = options.projectName || 'AgentCrew Workspace';
-    this.scheduler = options.scheduler;
+    this.scheduler = options.scheduler || new TurnScheduler({ maxConcurrency: 4 });
     this.takeoverController = options.takeoverController;
     this.popupEngine = options.popupEngine || new PopupScopeChangeEngine();
     this.observability = options.observability || new ObservabilityEngine();
@@ -42,6 +44,15 @@ class SupervisorServer {
     this.ptyManager = options.ptyManager || new PtyManager({ cwd: this.repoPath });
     // When true, chat replies come from the real provider CLIs (agy/codex); tests disable this.
     this.liveProviders = options.liveProviders !== false;
+
+    this.chatService = options.chatService || new ChatService({
+      repoPath: this.repoPath,
+      scheduler: this.scheduler,
+      ptyManager: this.ptyManager,
+      workspace: this.workspace,
+      projectId: this.projectId,
+      liveProviders: this.liveProviders,
+    });
 
     this.eventBus = options.eventBus || new EventEmitter();
     this.sseClients = new Set();
@@ -126,7 +137,7 @@ class SupervisorServer {
 
             if (!isShellCommand && trimmed.length > 0 && !trimmed.startsWith('./') && !trimmed.startsWith('/')) {
               // Route to active Agent Persona reasoning
-              const response = await this.generateAgentResponse(agentId, trimmed);
+              const response = await this.chatService.generateResponse(agentId, trimmed);
               const formattedOutput = `\r\n\x1b[1;36m[${agentId}]\x1b[0m ${response}\r\n`;
 
               // Send response back to connected WebSocket terminal
@@ -381,7 +392,7 @@ class SupervisorServer {
 
         if (!isShellCommand && cmd.length > 0 && !cmd.startsWith('./') && !cmd.startsWith('/')) {
           // Route dialogue directly to active Agent Persona reasoning
-          output = await this.generateAgentResponse(agentId, cmd);
+          output = await this.chatService.generateResponse(agentId, cmd);
           this.broadcastEvent('agent_answered', {
             agent_id: agentId,
             pr_number: 'live',
@@ -522,92 +533,6 @@ class SupervisorServer {
   jsonResponse(res, statusCode, data) {
     res.writeHead(statusCode, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(data));
-  }
-
-  async generateAgentResponse(agentId, prompt) {
-    let gitInfo = '';
-    try {
-      const gitCheck = await this.ptyManager.execute('git log -n 1 --oneline', { cwd: this.repoPath });
-      gitInfo = gitCheck.stdout ? `(Head: ${gitCheck.stdout})` : '';
-    } catch (_) {}
-
-    // Find agent definition to identify assigned role and configured provider
-    let agentRole = 'Agent';
-    let agentProvider = 'agy';
-    if (this.workspace && this.projectId) {
-      try {
-        const agents = await this.workspace.listAgents(this.projectId);
-        const match = agents.find(a => a.name.toLowerCase() === agentId.toLowerCase() || a.id === agentId);
-        if (match) {
-          agentRole = match.role;
-          agentProvider = match.provider || 'agy';
-        }
-      } catch (_) {}
-    } else {
-      const knownRoles = {
-        'Alice': { role: 'Business Analyst', provider: 'agy' },
-        'Peter': { role: 'Product Owner', provider: 'agy' },
-        'Arthur': { role: 'Architect', provider: 'codex' },
-        'Dev-1': { role: 'Developer', provider: 'codex' },
-        'Dev-2': { role: 'Developer', provider: 'codex' },
-        'Dev-3': { role: 'Developer', provider: 'agy' },
-        'Dev-4': { role: 'Developer', provider: 'agy' },
-        'QA-1': { role: 'Tester', provider: 'gemini' },
-        'QA-2': { role: 'Tester', provider: 'gemini' },
-        'QA-3': { role: 'Tester', provider: 'agy' },
-        'QA-4': { role: 'Tester', provider: 'agy' },
-        'Integrator-1': { role: 'Integrator', provider: 'codex' },
-        'Integrator-2': { role: 'Integrator', provider: 'agy' }
-      };
-      if (knownRoles[agentId]) {
-        agentRole = knownRoles[agentId].role;
-        agentProvider = knownRoles[agentId].provider;
-      }
-    }
-
-    // Attempt real LLM CLI execution via installed agy or codex
-    const promptInstructions = `You are ${agentId}, the ${agentRole} in an autonomous engineering team workspace. The repository has commit: ${gitInfo}. The human operator asks or says: "${prompt}". Answer concisely and authoritatively directly from your role's perspective (2-4 sentences max).`;
-
-    const label = `[${agentId} (${agentRole})]`;
-    const runners = {
-      agy: async () => {
-        const r = await this.ptyManager.execute(`agy --print ${JSON.stringify(promptInstructions)}`, { cwd: this.repoPath, timeoutMs: 45000 });
-        return { ...r, text: (r.stdout || '').trim() };
-      },
-      codex: async () => {
-        const r = await this.ptyManager.execute(`codex exec ${JSON.stringify(promptInstructions)}`, { cwd: this.repoPath, timeoutMs: 60000 });
-        const lines = (r.stdout || '').split('\n');
-        const idx = lines.findIndex(l => l.trim() === 'codex');
-        const text = idx !== -1
-          ? lines.slice(idx + 1).filter(l => !l.startsWith('tokens used') && !/^[\d,]+$/.test(l.trim()) && !l.startsWith('--------')).join('\n').trim()
-          : (r.stdout || '').trim();
-        return { ...r, text };
-      }
-    };
-
-    // Agent's own provider first, then any other installed provider.
-    const order = [agentProvider, 'agy', 'codex'].filter((p, i, a) => runners[p] && a.indexOf(p) === i && which(p));
-    const errors = [];
-
-    if (this.liveProviders) {
-      for (const name of order) {
-        try {
-          const r = await runners[name]();
-          if (r.text && !r.timedOut && r.code === 0) {
-            return `${label}: ${r.text}`;
-          }
-          const why = r.timedOut ? 'timed out' : ((r.stderr || '').split('\n')[0] || `exit ${r.code}`);
-          errors.push(`${name}: ${why}`);
-        } catch (e) {
-          errors.push(`${name}: ${e.message}`);
-        }
-      }
-      // Every real provider failed: say so honestly rather than faking a reply.
-      return `${label}: (no reply, every provider failed) ${errors.join(' | ')}`;
-    }
-
-    // liveProviders=false (tests only): deterministic offline reply.
-    return `${label}: [offline] ${prompt}`;
   }
 }
 

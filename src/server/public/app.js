@@ -628,6 +628,21 @@ document.addEventListener('DOMContentLoaded', () => {
       loadAgents();
     });
 
+    sse.addEventListener('agent_answered', (e) => {
+      const data = JSON.parse(e.data);
+      if (pixelRenderer && data.agent_id) {
+        pixelRenderer.showSpeechBubble(data.agent_id, 'Replying to PR question…', 4000);
+      }
+      log(`[${data.agent_id}] Response regarding PR #${data.pr_number}: ${data.question}`, 'success');
+    });
+
+    sse.addEventListener('command_executed', (e) => {
+      const data = JSON.parse(e.data);
+      if (pixelRenderer && data.agent_id) {
+        pixelRenderer.showSpeechBubble(data.agent_id, `Cmd: ${data.command.slice(0, 15)}`, 3000);
+      }
+    });
+
     sse.onerror = () => {
       if (statusEl) {
         statusEl.className = 'status-indicator disconnected';
@@ -658,6 +673,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (btnSendCmd) btnSendCmd.disabled = false;
         if (cmdInput) cmdInput.focus();
         connectPty(agentId);
+        if (pixelRenderer) {
+          pixelRenderer.showSpeechBubble(agentId, 'Operator Live Takeover', 8000);
+        }
         loadAgents();
       } catch (err) {
         log(`Takeover failed: ${err.message}`, 'action');

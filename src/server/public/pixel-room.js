@@ -64,6 +64,25 @@ class PixelRoomRenderer {
     }
   }
 
+  showSpeechBubble(agentIdentifier, text, durationMs = 4500) {
+    const match = this.stations.find(s =>
+      s.name.toLowerCase() === (agentIdentifier || '').toLowerCase() ||
+      s.id.toLowerCase() === (agentIdentifier || '').toLowerCase() ||
+      (agentIdentifier || '').toLowerCase().includes(s.name.toLowerCase())
+    );
+
+    if (match) {
+      match.speechText = text.length > 28 ? text.slice(0, 25) + '…' : text;
+      match.state = 'executing';
+      setTimeout(() => {
+        if (match.speechText) {
+          delete match.speechText;
+          match.state = 'idle';
+        }
+      }, durationMs);
+    }
+  }
+
   setTheme(theme) {
     this.theme = theme || 'light';
   }
@@ -373,6 +392,38 @@ class PixelRoomRenderer {
     ctx.lineTo(x + 2, y + 2);
     ctx.fill();
 
+    // Custom live speech bubble text
+    if (st.speechText) {
+      const text = st.speechText;
+      ctx.font = 'bold 9px sans-serif';
+      const textMetrics = ctx.measureText(text);
+      const bubbleW = Math.max(textMetrics.width + 12, 36);
+      const bubbleH = 16;
+      const bx = x - bubbleW / 2;
+      const by = y - 14;
+
+      ctx.fillStyle = '#ffffff';
+      ctx.strokeStyle = '#0284c7';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(bx, by, bubbleW, bubbleH, 4);
+      ctx.fill();
+      ctx.stroke();
+
+      // Pointer
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.moveTo(x - 3, by + bubbleH);
+      ctx.lineTo(x, by + bubbleH + 4);
+      ctx.lineTo(x + 3, by + bubbleH);
+      ctx.fill();
+
+      ctx.fillStyle = '#0f172a';
+      ctx.textAlign = 'center';
+      ctx.fillText(text, x, by + 11);
+      return;
+    }
+
     if (state === 'thinking' || state === 'executing') {
       // Animated typing dots
       const dotCount = Math.floor((this.animationTick / 10) % 4);
@@ -390,10 +441,10 @@ class PixelRoomRenderer {
       ctx.fillStyle = '#16a34a';
       ctx.font = '8px monospace';
       ctx.fillText('QA', x, y - 1);
-    } else if (state === 'takeover') {
+    } else if (state === 'takeover' || state === 'human_owned') {
       ctx.fillStyle = '#d97706';
       ctx.font = 'bold 9px monospace';
-      ctx.fillText('!', x, y - 1);
+      ctx.fillText('LIVE', x, y - 1);
     }
   }
 

@@ -207,6 +207,35 @@ class RepoDataService {
   }
 
   /**
+   * Fetch diff for a pull request using `gh pr diff` with git fallback
+   */
+  async getPrDiff(prNumber) {
+    if (!prNumber) return '';
+    const cacheKey = `prDiff-${prNumber}`;
+    const cached = this.cache.get(cacheKey);
+    if (cached && Date.now() - cached.time < this.cacheTtlMs * 2) {
+      return cached.data;
+    }
+
+    let diffText = '';
+
+    // 1. Try gh pr diff
+    const ghRes = await this.execCommand('gh', ['pr', 'diff', String(prNumber)]);
+    if (!ghRes.error && ghRes.stdout.trim()) {
+      diffText = ghRes.stdout.trim().slice(0, 4000);
+    } else {
+      // 2. Fallback to git log
+      const gitRes = await this.execCommand('git', ['log', '-1', '-p', '--stat']);
+      if (!gitRes.error && gitRes.stdout.trim()) {
+        diffText = gitRes.stdout.trim().slice(0, 4000);
+      }
+    }
+
+    this.cache.set(cacheKey, { data: diffText, time: Date.now() });
+    return diffText;
+  }
+
+  /**
    * Query pull requests via `gh` CLI or git log fallback
    */
   async getPullRequests() {

@@ -117,4 +117,12 @@ Implement plugins.
     assert.ok(delivKpi);
     assert.equal(delivKpi.value, '1'); // 1 Done task in tmpDir
   });
+
+  await t.test('getPrDiff fetches PR diff or git log diff', async () => {
+    const service = new RepoDataService({ repoPath: process.cwd() });
+    const diff = await service.getPrDiff(15);
+    assert.ok(typeof diff === 'string');
+    // In our git/gh environment PR 15 exists and returns diff or git log
+    assert.ok(diff.length > 0);
+  });
 });

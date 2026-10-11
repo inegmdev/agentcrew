@@ -460,55 +460,54 @@ class SupervisorServer {
         const author = payload.author || 'Dev-1';
 
         // Check if there is an active interactive PTY session for this agent to pipe to
-        let cliOutput = '';
         for (const [sessId, sess] of this.ptyManager.activeSessions) {
           if (sess.isAlive && sessId.includes(agentId)) {
             sess.write(`echo "[Ask from operator regarding PR #${prNumber}]: ${question}"\n`);
           }
         }
 
-        // Run git log or verification command in repo to ground the CLI answer
-        try {
-          const gitCheck = await this.ptyManager.execute(`git log -n 1 --oneline`, { cwd: this.repoPath });
-          cliOutput = gitCheck.stdout ? `(Head commit: ${gitCheck.stdout})` : '';
-        } catch (_) {}
+        // Fetch real PR diff from RepoDataService
+        let prDiff = '';
+        if (this.repoDataService) {
+          try {
+            prDiff = await this.repoDataService.getPrDiff(prNumber);
+          } catch (_) {}
+        }
 
-        // Synthesize agent persona review response based on PR context and assigned role
+        // Ground prompt in actual PR context: number, title, author, diff, and question
+        const promptLines = [
+          `[Code Review Request on PR #${prNumber}: "${prTitle}" authored by @${author}]`,
+          prDiff ? `Diff snapshot:\n\`\`\`diff\n${prDiff}\n\`\`\`` : '',
+          `Operator question: "${question}"`,
+          `Please analyze this pull request thoroughly from your identity's role perspective and respond directly to the operator.`
+        ].filter(Boolean).join('\n\n');
+
         let answer = '';
-        const qLower = question.toLowerCase();
+        let providerError = null;
 
-        if (qLower.includes('arch') || qLower.includes('design') || qLower.includes('modular') || qLower.includes('seam')) {
-          answer = `**[${agentId}] Architectural Assessment ${cliOutput}:**\n` +
-            `Reviewed PR #${prNumber} against technical standards. The implementation isolates side effects behind explicit interfaces, conforms to the bounded module boundary, and introduces 0 circular module dependencies. Approved from architectural perspective.`;
-        } else if (qLower.includes('test') || qLower.includes('coverage') || qLower.includes('qa') || qLower.includes('pass')) {
-          answer = `**[QA Lead & Verification ${cliOutput}]:**\n` +
-            `Verification complete for PR #${prNumber} (${prTitle}). All automated suites passed green with revision-bound verification token. Acceptance criteria verified 100%.`;
-        } else if (qLower.includes('risk') || qLower.includes('break') || qLower.includes('blast')) {
-          answer = `**[${agentId}] Merge & Blast Radius Review ${cliOutput}:**\n` +
-            `Blast radius is contained strictly within the scoped package. Changes are backward-compatible and two-way reversible. Zero unmanaged upstream dependencies added.`;
+        if (this.chatService) {
+          try {
+            answer = await this.chatService.generateResponse(agentId, promptLines);
+          } catch (err) {
+            providerError = err.message;
+          }
         } else {
-          if (this.liveProviders && this.chatService) {
-            try {
-              const prompt = `[Code Review Query for PR #${prNumber} "${prTitle}"]: ${question}`;
-              answer = await this.chatService.generateResponse(agentId, prompt);
-            } catch (_) {}
-          }
-          if (!answer) {
-            answer = `**[${agentId} Response to @operator ${cliOutput}]:**\n` +
-              `Regarding "${question}" on PR #${prNumber}:\n` +
-              `Author @${author} implemented this change to fulfill the iteration requirement. Verified clean diff and ready for integrator review and operator merge.`;
-          }
+          providerError = 'ChatService is not initialized on the supervisor server.';
         }
 
         result = {
           agent_id: agentId,
           pr_number: prNumber,
           question,
-          answer,
-          cli_grounded: Boolean(cliOutput),
+          answer: answer || null,
+          error: providerError || null,
+          cli_grounded: Boolean(prDiff),
           timestamp: new Date().toISOString()
         };
-        this.broadcastEvent('agent_answered', result);
+
+        if (answer) {
+          this.broadcastEvent('agent_answered', result);
+        }
       } else {
         result = { accepted: true, command_type };
       }

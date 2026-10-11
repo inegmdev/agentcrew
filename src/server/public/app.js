@@ -481,11 +481,14 @@ document.addEventListener('DOMContentLoaded', () => {
       let reply = '';
       if (data.result && data.result.answer) {
         reply = data.result.answer;
+        assistantAnswerText.innerHTML = reply.replace(/\n\n/g, '<br/><br/>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+      } else if (data.result && data.result.error) {
+        assistantAnswerText.innerHTML = `<span style="color: var(--danger);">Provider error [${targetAgent}]: ${data.result.error}</span>`;
+      } else if (data.error) {
+        assistantAnswerText.innerHTML = `<span style="color: var(--danger);">Server error: ${data.error}</span>`;
       } else {
-        reply = `**[${targetAgent}]:** Analyzed PR #${selectedPR.number}. All checks and diff validations passed.`;
+        assistantAnswerText.innerHTML = `<span style="color: var(--danger);">No response received from provider CLI.</span>`;
       }
-
-      assistantAnswerText.innerHTML = reply.replace(/\n\n/g, '<br/><br/>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
     } catch (err) {
       assistantShimmer.style.display = 'none';
       assistantAnswerText.innerHTML = `<span style="color: var(--danger);">Failed to query agent: ${err.message}</span>`;

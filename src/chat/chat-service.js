@@ -136,8 +136,12 @@ class ChatService {
       } catch (_) {}
     }
 
+    const cleanId = agentId.replace(/\s*\(.*?\)\s*/g, '').trim().toLowerCase();
     const fallback = DEFAULT_ROSTER.find(
-      (m) => m.name.toLowerCase() === agentId.toLowerCase() || m.role.toLowerCase() === agentId.toLowerCase()
+      (m) => m.name.toLowerCase() === agentId.toLowerCase() ||
+             m.role.toLowerCase() === agentId.toLowerCase() ||
+             m.name.toLowerCase() === cleanId ||
+             m.role.toLowerCase() === cleanId
     );
 
     if (fallback) {

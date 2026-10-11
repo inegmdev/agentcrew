@@ -15,8 +15,8 @@ ordinal: 24000
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Root / serves single-page dashboard with isometric team room and Kanban
-- [ ] #2 Dashboard establishes SSE stream and updates agent badges and task state live
-- [ ] #3 Interactive takeover modal enables session intervention and release
-- [ ] #4 Dashboard tests verify static asset delivery and responsive UI components
+- [x] #1 Root / serves single-page dashboard with isometric team room and Kanban
+- [x] #2 Dashboard establishes SSE stream and updates agent badges and task state live
+- [x] #3 Interactive takeover modal enables session intervention and release
+- [x] #4 Dashboard tests verify static asset delivery and responsive UI components
 <!-- AC:END -->

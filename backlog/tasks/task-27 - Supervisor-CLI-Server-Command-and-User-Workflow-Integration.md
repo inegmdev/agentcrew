@@ -15,8 +15,8 @@ ordinal: 25000
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 CLI supports agentcrew server [port] command with custom port and quiet flags
-- [ ] #2 Server terminates gracefully on SIGINT and SIGTERM
-- [ ] #3 End-to-end integration test exercises entire user workflow via HTTP client
-- [ ] #4 npm run server script added to package.json
+- [x] #1 CLI supports agentcrew server [port] command with custom port and quiet flags
+- [x] #2 Server terminates gracefully on SIGINT and SIGTERM
+- [x] #3 End-to-end integration test exercises entire user workflow via HTTP client
+- [x] #4 npm run server script added to package.json
 <!-- AC:END -->

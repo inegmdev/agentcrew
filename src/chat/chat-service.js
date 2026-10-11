@@ -63,12 +63,38 @@ class ChatService {
     this.liveProviders = opts.liveProviders !== undefined
       ? opts.liveProviders
       : Boolean(process.env.AGENTCREW_LIVE_PROVIDERS);
+    this.sessionCache = new Map();
 
     this.adapters = {
       agy: opts.adapters?.agy || new AgyAdapter(),
       codex: opts.adapters?.codex || new CodexAdapter(),
       gemini: opts.adapters?.gemini || new GeminiAdapter(),
     };
+  }
+
+  async getAgentSession(agentId) {
+    if (this.sessionCache.has(agentId)) {
+      return this.sessionCache.get(agentId);
+    }
+    if (this.workspace && this.projectId) {
+      try {
+        const session = await this.workspace.getAgentSession(this.projectId, agentId);
+        if (session) {
+          this.sessionCache.set(agentId, session);
+          return session;
+        }
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  async saveAgentSession(agentId, sessionData) {
+    this.sessionCache.set(agentId, sessionData);
+    if (this.workspace && this.projectId) {
+      try {
+        await this.workspace.saveAgentSession(this.projectId, agentId, sessionData);
+      } catch (_) {}
+    }
   }
 
   buildRolePrompt({ agentName, role, gitContext, userPrompt } = {}) {
@@ -155,6 +181,9 @@ class ChatService {
         return `${label}: [offline] ${prompt}`;
       }
 
+      // Check for active persistent session for this agent
+      const existingSession = await this.getAgentSession(agent.name);
+
       // Order providers: agent's assigned provider first, followed by others
       const order = [agent.provider, 'agy', 'codex']
         .filter((p, i, a) => this.adapters[p] && a.indexOf(p) === i && this.which(p));
@@ -170,18 +199,26 @@ class ChatService {
             modelArg = agent.model;
           }
 
+          const resumeFrom = (existingSession && existingSession.provider === name)
+            ? existingSession.sessionId
+            : (options.resumeFrom || undefined);
+
           const spawnArgs = adapter.buildSpawnArgs({
             cwd: this.repoPath,
             model: modelArg,
-            resumeFrom: options.resumeFrom,
+            resumeFrom,
           });
 
           let result = null;
           if (name === 'agy') {
-            // Adapt agy flags to attach prompt argument without shell escaping
+            // Adapt agy flags to attach prompt argument without shell escaping and request JSON output for session tracking
             const finalArgs = spawnArgs
               .map((arg) => (arg === '-p' ? `-p=${promptInstructions}` : arg))
               .filter((arg) => arg !== '--input-format' && arg !== 'stream-json' && arg !== '--output-format');
+
+            if (!finalArgs.includes('--output-format') && !finalArgs.some(a => a.startsWith('--output-format='))) {
+              finalArgs.push('--output-format', 'json');
+            }
 
             if (this.ptyManager.executeCommand) {
               result = await this.ptyManager.executeCommand(adapter.command || 'agy', finalArgs, {
@@ -195,7 +232,24 @@ class ChatService {
               );
             }
 
-            const text = (result.stdout || '').trim();
+            let text = '';
+            try {
+              const data = JSON.parse(result.stdout || '{}');
+              if (data.conversation_id) {
+                await this.saveAgentSession(agent.name, {
+                  provider: 'agy',
+                  sessionId: data.conversation_id,
+                });
+              }
+              if (data.response) {
+                text = data.response.trim();
+              }
+            } catch (_) {}
+
+            if (!text) {
+              text = (result.stdout || '').trim();
+            }
+
             if (text && !result.timedOut && result.code === 0) {
               return `${label}: ${text}`;
             }
@@ -214,15 +268,30 @@ class ChatService {
               );
             }
 
-            // Parse response events using CodexAdapter
+            // Parse response events and capture thread_id for session tracking
             let answerText = '';
+            let threadId = null;
             const lines = (result.stdout || '').split('\n');
             for (const line of lines) {
+              try {
+                const parsed = JSON.parse(line.trim());
+                if (parsed.type === 'thread.started' && parsed.thread_id) {
+                  threadId = parsed.thread_id;
+                }
+              } catch (_) {}
+
               const event = adapter.parseStreamEvent(line);
               if (event && event.type === 'message.assistant' && event.text) {
                 answerText = event.text;
                 break;
               }
+            }
+
+            if (threadId) {
+              await this.saveAgentSession(agent.name, {
+                provider: 'codex',
+                sessionId: threadId,
+              });
             }
 
             if (!answerText) {

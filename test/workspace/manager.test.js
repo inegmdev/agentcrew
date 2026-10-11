@@ -48,3 +48,39 @@ test('WorkspaceManager retrieves project readiness check', async () => {
 
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
+
+test('WorkspaceManager persists and retrieves agent provider session (TASK-29)', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agentcrew-test-'));
+  const manager = new WorkspaceManager({ baseDir: tmpDir });
+
+  const project = await manager.initProject({
+    repoPath: process.cwd(),
+    name: 'test-project',
+  });
+
+  // Verify non-existent session
+  const none = await manager.getAgentSession(project.id, 'Alice');
+  assert.equal(none, null);
+
+  // Save session
+  await manager.saveAgentSession(project.id, 'Alice', {
+    provider: 'agy',
+    sessionId: 'session-alice-uuid-999',
+  });
+
+  // Retrieve session
+  const session = await manager.getAgentSession(project.id, 'Alice');
+  assert.equal(session.provider, 'agy');
+  assert.equal(session.sessionId, 'session-alice-uuid-999');
+
+  // Update session
+  await manager.saveAgentSession(project.id, 'Alice', {
+    provider: 'agy',
+    sessionId: 'session-alice-uuid-1000',
+  });
+  const updated = await manager.getAgentSession(project.id, 'Alice');
+  assert.equal(updated.sessionId, 'session-alice-uuid-1000');
+
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
+

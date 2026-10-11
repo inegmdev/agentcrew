@@ -227,3 +227,15 @@ Implemented TASK-30 (`feat/task-30-chatservice-plugin-scheduler`):
 - Completely removed `generateAgentResponse` from `SupervisorServer` and delegated to `chatService.generateResponse`.
 - Added unit tests in `test/chat/chat-service.test.js`. All 62 unit and integration tests passing green.
 
+Implemented TASK-29 (`feat/task-29-persistent-agent-sessions`):
+- Added `provider_sessions` table in SQLite (`src/workspace/manager.js`) with `saveAgentSession` and `getAgentSession`.
+- Maintained in-memory and database session mapping in `ChatService` (`this.sessionCache`).
+- Automatically extracted `conversation_id` from `agy` (`--output-format json`) and `thread_id` from `codex` (`thread.started`).
+- Re-passed `resumeFrom` on follow-up chat turns via `agy --conversation <id>` and `codex exec ... resume <thread_id>`.
+- Verified live end-to-end memory recall across multi-turn chats:
+  - Alice recalled secret number `01000079031` on turn 2.
+  - Dev-1 recalled build token `alpha-9482` on turn 2.
+- Added comprehensive unit and contract tests in `test/chat/chat-service.test.js` and `test/workspace/manager.test.js`.
+- All 65 unit, contract, and workflow tests passing green (`npm test`).
+
+

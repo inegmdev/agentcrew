@@ -126,7 +126,7 @@ test('SupervisorServer serves TRD §12 API routes and SSE stream', async (t) => 
     assert.equal(listData.popups.length, 1);
   });
 
-  await t.test('POST /api/v1/commands executes agent.ask and returns agent answer', async () => {
+  await t.test('POST /api/v1/commands executes agent.ask via ChatService with PR context', async () => {
     const askRes = await fetch(`${baseUrl}/api/v1/commands`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -144,8 +144,44 @@ test('SupervisorServer serves TRD §12 API routes and SSE stream', async (t) => 
     assert.equal(askRes.status, 200);
     const askData = await askRes.json();
     assert.equal(askData.status, 'acknowledged');
-    assert.ok(askData.result.answer.includes('Architectural Assessment'));
     assert.equal(askData.result.pr_number, 26);
+    assert.equal(askData.result.agent_id, 'Arthur (Architect)');
+    assert.ok(askData.result.answer.includes('[Arthur (Architect)]'));
+    assert.ok(askData.result.answer.includes('PR #26'));
+  });
+
+  await t.test('POST /api/v1/commands agent.ask propagates provider error without fake fallback', async () => {
+    const failingServer = new SupervisorServer({
+      port: 0,
+      workspace,
+      projectId: project.id,
+      staticDir: path.join(__dirname, 'fixtures'),
+      liveProviders: false,
+      chatService: {
+        generateResponse: async () => { throw new Error('CLI quota 429 exhausted'); }
+      }
+    });
+    await failingServer.start();
+    const failingPort = failingServer.httpServer.address().port;
+    try {
+      const askRes = await fetch(`http://127.0.0.1:${failingPort}/api/v1/commands`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          command_type: 'agent.ask',
+          payload: {
+            agent_id: 'Dev-1',
+            pr_number: 15,
+            question: 'Can you review this?'
+          }
+        })
+      });
+      const data = await askRes.json();
+      assert.equal(data.result.answer, null);
+      assert.ok(data.result.error.includes('CLI quota 429 exhausted'));
+    } finally {
+      await failingServer.stop();
+    }
   });
 
   await t.test('GET /api/v1/tasks returns backlog tasks array', async () => {

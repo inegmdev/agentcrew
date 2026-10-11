@@ -254,3 +254,16 @@ Implemented Live Repository Data Feed (`feat/live-repository-data-feed`):
   - Added author avatar fallback using Dicebear bots seed for GitHub logins (`inegmdev`, `Claude`).
 - Added unit and contract tests in `test/server/repo-data-service.test.js` and `test/server/http-api.test.js`.
 - All 75 tests passing green (`npm test`). Server daemon restarted and serving live data on `http://127.0.0.1:3000`.
+
+## 2026-10-12
+
+Implemented TASK-31 (`feat/task-31-live-code-review-assistant`):
+- Eliminated all canned keyword template branches (`arch`, `test`, `risk`) in `SupervisorServer.handleApi` (`command_type: 'agent.ask'`).
+- Added `getPrDiff(prNumber)` in `RepoDataService` to query real PR diffs via `gh pr diff` with `git log` fallback.
+- Grounded `agent.ask` prompt with live PR diff, title, author, and question, delegating to `ChatService.generateResponse` across assigned agent identities (Arthur Architect, QA Lead, Dev-1, etc.).
+- Handled provider error propagation cleanly: surfaces actual provider error when CLIs fail without returning fake canned text.
+- Enhanced `ChatService.resolveAgent` to clean formatted identity names like `Arthur (Architect)` and `Alice (BA)` to match the canonical agent roster.
+- Updated Web UI drawer in `app.js` (`askAssistant`) to render real provider errors and responses.
+- Verified live end-to-end: Arthur (Architect) analyzed real PR #15 diff and reasoned about architectural boundaries and regression impact.
+- Added contract tests in `test/server/http-api.test.js` and `test/server/repo-data-service.test.js`.
+- All 77 unit, contract, and server tests passing green (`npm test`).

@@ -35,10 +35,14 @@ test('SupervisorServer serves interactive Web UI dashboard bundle', async (t) =>
     assert.ok(html.includes('pixel-room-canvas'));
     assert.ok(html.includes('team-room-grid'));
     assert.ok(html.includes('kanban-board'));
-    assert.ok(html.includes('takeover-panel'));
+    assert.ok(html.includes('view-overview'));
     assert.ok(html.includes('view-team-room'));
+    assert.ok(html.includes('view-reviews'));
     assert.ok(html.includes('view-kanban'));
+    assert.ok(html.includes('view-repositories'));
     assert.ok(html.includes('view-observability'));
+    assert.ok(html.includes('view-settings'));
+    assert.ok(html.includes('pr-details-panel'));
   });
 
   await t.test('GET /pixel-room.js returns pixel-art isometric engine with theme support', async () => {
@@ -68,6 +72,17 @@ test('SupervisorServer serves interactive Web UI dashboard bundle', async (t) =>
     const css = await res.text();
     assert.ok(css.includes('[data-theme="light"]'));
     assert.ok(css.includes('[data-theme="dark"]'));
+    assert.ok(css.includes('pr-details-dock'));
+  });
+
+  await t.test('GET /analytics-dashboard-data.js returns typed analytics data', async () => {
+    const res = await fetch(`${baseUrl}/analytics-dashboard-data.js`);
+    assert.equal(res.status, 200);
+    assert.ok(res.headers.get('content-type').includes('application/javascript'));
+    const js = await res.text();
+    assert.ok(js.includes('agentCrewAnalyticsData'));
+    assert.ok(js.includes('Arthur'));
+    assert.ok(js.includes('TASK-26'));
   });
 
   await t.test('GET /non-existent-asset.xyz returns 404', async () => {

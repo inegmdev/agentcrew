@@ -70,6 +70,64 @@ class PtyManager extends EventEmitter {
     return this.activeSessions.get(id);
   }
 
+  async execute(command, { timeoutMs = 8000, cwd } = {}) {
+    return new Promise((resolve, reject) => {
+      const isWin = process.platform === 'win32';
+      const shellCmd = isWin ? 'cmd.exe' : (this.shell || '/bin/bash');
+      const args = isWin ? ['/c', command] : ['-c', command];
+
+      const child = spawn(shellCmd, args, {
+        cwd: cwd || this.cwd,
+        env: {
+          ...process.env,
+          TERM: 'xterm-256color',
+        },
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+
+      let stdout = '';
+      let stderr = '';
+
+      child.stdout.on('data', (c) => { stdout += c.toString('utf8'); });
+      child.stderr.on('data', (c) => { stderr += c.toString('utf8'); });
+
+      let finished = false;
+      const timer = setTimeout(() => {
+        if (!finished) {
+          finished = true;
+          try { child.kill('SIGKILL'); } catch (_) {}
+          resolve({
+            stdout: stdout.trim(),
+            stderr: stderr.trim() || 'Command timed out',
+            code: -1,
+            timedOut: true
+          });
+        }
+      }, timeoutMs);
+
+      child.on('close', (code) => {
+        if (!finished) {
+          finished = true;
+          clearTimeout(timer);
+          resolve({
+            stdout: stdout.trim(),
+            stderr: stderr.trim(),
+            code,
+            timedOut: false
+          });
+        }
+      });
+
+      child.on('error', (err) => {
+        if (!finished) {
+          finished = true;
+          clearTimeout(timer);
+          reject(err);
+        }
+      });
+    });
+  }
+
   killAll() {
     for (const session of this.activeSessions.values()) {
       session.kill();

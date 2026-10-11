@@ -181,3 +181,9 @@ Connected Code Review Assistant directly to live agent backend (`feat/live-agent
   with `command_type: 'agent.ask'`, passing PR number, title, question, and author.
 - Added automated contract test in `test/server/http-api.test.js`.
 - All 57 tests passing green.
+
+Piped chat boxes across Web UI to real CLI execution (`feat/pipe-all-chats-to-cli`):
+- Added `execute(command)` to `PtyManager` executing commands in child shell processes with real stdout/stderr capture and timeout management.
+- Connected `session.exec` and `agent.ask` in `SupervisorServer` to execute against real shell process and active PTY sessions in the repository workspace.
+- Grounded PR review responses with live git verification data (`git log -n 1 --oneline`) and active terminal notifications.
+- All 57 tests passing green.

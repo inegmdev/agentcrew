@@ -197,3 +197,23 @@ Connected Takeover Console to Agent Persona Reasoning & Fixed Terminal Output:
 - Sanitized raw ANSI escape sequences and OSC window title/CWD escape codes in `app.js` (`ptySocket.onmessage`).
 - Fixed `loadReadiness()` in `app.js` and `GET /api/v1/readiness` to gracefully supply `qualified_providers`, resolving the `forEach of undefined` client error.
 - All 58 tests passing green (`npm test`). Server running cleanly on `0.0.0.0:3000`.
+
+### 2026-10-11 (late) — real CLI chat + findings for next session
+
+Chat in the Takeover Console is now backed by real `agy`/`codex` (was canned text — "Requirement review noted…" was a hardcoded template). Failover agy→codex; if all fail the real error is shown. 58 tests green; `liveProviders:false` keeps tests offline.
+
+Gotchas worth remembering:
+- `PtyManager.execute` must `stdin.end()`: `codex exec` waits on piped stdin ("Reading additional input from stdin…") and times out otherwise.
+- `agy` hit quota 429 (resets ~9 min) mid-session; chat silently needed codex. `gemini` CLI is not installed.
+- `codex exec` stdout = answer only; banner is on stderr.
+- Direct pushes to main happened this session (no PR); no `.github/workflows` exists.
+
+Next-session todo (all in backlog, high first):
+- TASK-29 persistent per-agent sessions (multi-turn memory)
+- TASK-30 ChatService behind ProviderPlugin + TurnScheduler (remove `generateAgentResponse` from supervisor-server)
+- TASK-31 Code Review `agent.ask` still templated
+- TASK-32 takeover is cosmetic (global state, 20ms fake wait, fresh bash not agent session)
+- TASK-33 chat-vs-shell regex is fragile ("find the riskiest module" runs `find`)
+- TASK-34 provider health/quota UX; readiness hardcodes "ready"
+- TASK-35 streaming replies + typing state
+- TASK-36 ops: LAN/cloudflared over localtunnel, CI workflow, no direct pushes to main

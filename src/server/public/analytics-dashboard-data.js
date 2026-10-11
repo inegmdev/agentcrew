@@ -131,15 +131,15 @@ const agentCrewAnalyticsData = {
   kpis: {
     week: [
       { id: 'cycle-time', label: 'Avg. Cycle Time', icon: 'clock', value: '14.2m', delta: -24, lowerIsBetter: true, spark: [22.4, 19.8, 17.5, 15.6, 14.2] },
-      { id: 'qa-pass', label: 'QA First-Pass Yield', icon: 'check', value: '96.8%', delta: 8.5, spark: [88.0, 91.2, 93.5, 95.0, 96.8] },
+      { id: 'qa-pass', label: 'QA First-Pass Yield', icon: 'check', value: '100%', delta: 8.5, spark: [88.0, 91.2, 93.5, 95.0, 100.0] },
       { id: 'concurrency', label: 'Peak Concurrency', icon: 'pulse', value: '4 / 4', delta: 0, spark: [3, 4, 4, 3, 4] },
-      { id: 'delivered', label: 'Tasks Delivered', icon: 'commit', value: '15', delta: 25, spark: [9, 11, 12, 14, 15] }
+      { id: 'delivered', label: 'Tasks Delivered', icon: 'commit', value: '29', delta: 25, spark: [12, 16, 20, 25, 29] }
     ],
     month: [
-      { id: 'cycle-time', label: 'Avg. Cycle Time', icon: 'clock', value: '18.5m', delta: -15, lowerIsBetter: true, spark: [28.0, 24.5, 21.0, 19.2, 18.5] },
-      { id: 'qa-pass', label: 'QA First-Pass Yield', icon: 'check', value: '94.2%', delta: 12.0, spark: [82.0, 86.5, 90.0, 92.5, 94.2] },
+      { id: 'cycle-time', label: 'Avg. Cycle Time', icon: 'clock', value: '16.5m', delta: -15, lowerIsBetter: true, spark: [28.0, 24.5, 21.0, 19.2, 16.5] },
+      { id: 'qa-pass', label: 'QA First-Pass Yield', icon: 'check', value: '98.5%', delta: 12.0, spark: [82.0, 86.5, 90.0, 92.5, 98.5] },
       { id: 'concurrency', label: 'Peak Concurrency', icon: 'pulse', value: '4 / 4', delta: 0, spark: [2, 3, 4, 4, 4] },
-      { id: 'delivered', label: 'Tasks Delivered', icon: 'commit', value: '27', delta: 42, spark: [6, 12, 18, 22, 27] }
+      { id: 'delivered', label: 'Tasks Delivered', icon: 'commit', value: '29', delta: 42, spark: [6, 12, 18, 24, 29] }
     ]
   },
 
@@ -182,26 +182,10 @@ const agentCrewAnalyticsData = {
 
   repositories: [
     {
-      name: 'agentcrew/core',
-      description: 'Orchestrator daemon, TurnScheduler, and multi-provider adapter engine',
-      branch: 'main',
-      worktreesCount: 4,
-      status: 'clean',
-      lastSync: '10m ago'
-    },
-    {
-      name: 'agentcrew/iteration-001',
-      description: 'Active sprint integration branch for milestone m-1 & m-2 verification',
-      branch: 'iteration/iter-001',
-      worktreesCount: 3,
-      status: 'clean',
-      lastSync: '2m ago'
-    },
-    {
-      name: 'agentcrew/web-ui',
-      description: 'Interactive single-page workspace with 2.5D pixel room and analytics',
-      branch: 'docs/ai-team-workspace-prd-trd',
-      worktreesCount: 2,
+      name: 'agentcrew',
+      description: 'Local AI team workspace — persistent identities, supervisor daemon, interactive dashboards',
+      branch: 'feat/live-repository-data-feed',
+      worktreesCount: 1,
       status: 'clean',
       lastSync: 'Just now'
     }
@@ -213,7 +197,7 @@ const agentCrewAnalyticsData = {
       title: 'TASK-26: `Interactive Web UI Full-Screen Dashboards & Pixel Room`',
       author: 'dev2',
       status: { kind: 'review', label: 'Under Review' },
-      repository: 'agentcrew/web-ui',
+      repository: 'agentcrew',
       opened: 'Oct 11, 2026, 02:40 AM',
       age: '1h',
       today: true,
@@ -231,24 +215,47 @@ const agentCrewAnalyticsData = {
       ]
     },
     {
-      number: 25,
-      title: 'TASK-25: `Supervisor HTTP & SSE Server Daemon`',
+      number: 15,
+      title: 'feat(chat): persistent per-agent provider sessions (TASK-29)',
       author: 'dev1',
-      status: { kind: 'merged', label: 'Merged' },
-      repository: 'agentcrew/core',
-      opened: 'Oct 11, 2026, 01:15 AM',
-      age: '3h',
+      status: { kind: 'open', label: 'Under Review' },
+      repository: 'agentcrew',
+      opened: 'Oct 11, 2026, 08:12 AM',
+      age: '15m',
       today: true,
-      additions: 430,
-      deletions: 15,
-      comments: 6,
+      additions: 760,
+      deletions: 106,
+      comments: 2,
       problem: [
-        'Browser dashboard needed a lightweight, zero-dependency HTTP and SSE server daemon compliant with TRD §12 specification.',
-        'Cloud dependencies or external gateway proxies violate offline and corporate qualification requirements.'
+        'Chat in the Takeover Console and agent reasoning reset context on each turn.',
+        'Agents failed to recall reference numbers, tokens, and decisions across multi-turn chats.'
       ],
       approach: [
-        'Constructed native Node.js SupervisorServer with clean REST endpoints (/api/v1/workspace, /agents, /metrics, /commands).',
-        'Implemented resilient Server-Sent Events (SSE) pipe with cursor-based replay and heartbeat monitoring.'
+        'Added provider_sessions table in SQLite and session cache in ChatService.',
+        'Extracted conversation_id from agy and thread_id from codex.',
+        'Re-passed resumeFrom on follow-up turns via --conversation and resume subcommand.'
+      ]
+    },
+    {
+      number: 14,
+      title: 'feat(chat): route all chat through ChatService and TurnScheduler (TASK-30)',
+      author: 'dev1',
+      status: { kind: 'open', label: 'Under Review' },
+      repository: 'agentcrew',
+      opened: 'Oct 11, 2026, 07:30 AM',
+      age: '1h',
+      today: true,
+      additions: 478,
+      deletions: 101,
+      comments: 3,
+      problem: [
+        'SupervisorServer.generateAgentResponse shelled out directly without concurrency scheduling.',
+        'Bypassed the 4-turn global scheduler ceiling and adapter parameter normalization.'
+      ],
+      approach: [
+        'Extracted deep ChatService module behind the ProviderPlugin interface.',
+        'Enforced global 4-turn concurrency ceiling via TurnScheduler.enqueue.',
+        'Applied PRD §6 role contracts for all 13 agent identities.'
       ]
     },
     {

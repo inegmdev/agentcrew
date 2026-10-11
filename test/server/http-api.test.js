@@ -30,7 +30,8 @@ test('SupervisorServer serves TRD §12 API routes and SSE stream', async (t) => 
     projectName: 'Server Test Project',
     scheduler,
     takeoverController: takeover,
-    staticDir: path.join(__dirname, 'fixtures')
+    staticDir: path.join(__dirname, 'fixtures'),
+    liveProviders: false
   });
 
   await server.start();
@@ -145,6 +146,37 @@ test('SupervisorServer serves TRD §12 API routes and SSE stream', async (t) => 
     assert.equal(askData.status, 'acknowledged');
     assert.ok(askData.result.answer.includes('Architectural Assessment'));
     assert.equal(askData.result.pr_number, 26);
+  });
+
+  await t.test('GET /api/v1/tasks returns backlog tasks array', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/tasks`);
+    assert.equal(res.status, 200);
+    const data = await res.json();
+    assert.ok(Array.isArray(data.tasks));
+  });
+
+  await t.test('GET /api/v1/pull-requests returns PR array', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/pull-requests`);
+    assert.equal(res.status, 200);
+    const data = await res.json();
+    assert.ok(Array.isArray(data.pullRequests));
+  });
+
+  await t.test('GET /api/v1/repositories returns active repositories and worktrees', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/repositories`);
+    assert.equal(res.status, 200);
+    const data = await res.json();
+    assert.ok(Array.isArray(data.repositories));
+    assert.ok(data.repositories.length >= 1);
+  });
+
+  await t.test('GET /api/v1/analytics returns KPIs and repository activity', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/analytics`);
+    assert.equal(res.status, 200);
+    const data = await res.json();
+    assert.ok(data.analytics);
+    assert.ok(data.analytics.kpis);
+    assert.ok(data.analytics.repositories);
   });
 
   await t.test('GET /api/v1/metrics returns cycle time and utilization metrics', async () => {

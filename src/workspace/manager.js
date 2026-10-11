@@ -115,6 +115,52 @@ class WorkspaceManager {
       configuredProviders: providers,
     };
   }
+
+  async getAgentSession(projectId, agentId) {
+    const dbPath = path.join(this.baseDir, 'projects', projectId, 'agentcrew.db');
+    if (!fs.existsSync(dbPath)) return null;
+    const db = new DatabaseSync(dbPath);
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS provider_sessions (
+        project_id TEXT NOT NULL,
+        agent_id TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (project_id, agent_id)
+      );
+    `);
+    const stmt = db.prepare('SELECT session_id, provider FROM provider_sessions WHERE project_id = ? AND agent_id = ?');
+    const row = stmt.get(projectId, agentId);
+    db.close();
+    return row ? { sessionId: row.session_id, provider: row.provider } : null;
+  }
+
+  async saveAgentSession(projectId, agentId, { provider, sessionId } = {}) {
+    const dbPath = path.join(this.baseDir, 'projects', projectId, 'agentcrew.db');
+    if (!fs.existsSync(dbPath)) return;
+    const db = new DatabaseSync(dbPath);
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS provider_sessions (
+        project_id TEXT NOT NULL,
+        agent_id TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        session_id TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (project_id, agent_id)
+      );
+    `);
+    const stmt = db.prepare(`
+      INSERT INTO provider_sessions (project_id, agent_id, provider, session_id, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(project_id, agent_id) DO UPDATE SET
+        provider = excluded.provider,
+        session_id = excluded.session_id,
+        updated_at = excluded.updated_at
+    `);
+    stmt.run(projectId, agentId, provider, sessionId, new Date().toISOString());
+    db.close();
+  }
 }
 
 module.exports = { WorkspaceManager, DEFAULT_ROSTER };

@@ -217,3 +217,40 @@ Next-session todo (all in backlog, high first):
 - TASK-34 provider health/quota UX; readiness hardcodes "ready"
 - TASK-35 streaming replies + typing state
 - TASK-36 ops: LAN/cloudflared over localtunnel, CI workflow, no direct pushes to main
+
+Implemented TASK-30 (`feat/task-30-chatservice-plugin-scheduler`):
+- Extracted deep `ChatService` module (`src/chat/chat-service.js`) with PRD §6 role contracts (BA, PO, Architect, Developer, Tester, Integrator) and grounding in repo Git commits.
+- Enforced global 4-turn concurrency ceiling via `TurnScheduler.enqueue`.
+- Used `AgyAdapter` and `CodexAdapter.buildSpawnArgs()` directly with clean binary spawn in `PtyManager.executeCommand` without shell string concatenation.
+- Normalized Codex JSONL stream events supporting both `item.completed` and `item_completed`.
+- Safely handled provider model selection (avoiding invalid `gemini-2.5-pro` on `agy` and unsupported `o3` on ChatGPT accounts for `codex`, preserving automatic defaults).
+- Completely removed `generateAgentResponse` from `SupervisorServer` and delegated to `chatService.generateResponse`.
+- Added unit tests in `test/chat/chat-service.test.js`. All 62 unit and integration tests passing green.
+
+Implemented TASK-29 (`feat/task-29-persistent-agent-sessions`):
+- Added `provider_sessions` table in SQLite (`src/workspace/manager.js`) with `saveAgentSession` and `getAgentSession`.
+- Maintained in-memory and database session mapping in `ChatService` (`this.sessionCache`).
+- Automatically extracted `conversation_id` from `agy` (`--output-format json`) and `thread_id` from `codex` (`thread.started`).
+- Re-passed `resumeFrom` on follow-up chat turns via `agy --conversation <id>` and `codex exec ... resume <thread_id>`.
+- Verified live end-to-end memory recall across multi-turn chats:
+  - Alice recalled secret number `01000079031` on turn 2.
+  - Dev-1 recalled build token `alpha-9482` on turn 2.
+- Added comprehensive unit and contract tests in `test/chat/chat-service.test.js` and `test/workspace/manager.test.js`.
+- All 65 unit, contract, and workflow tests passing green (`npm test`).
+Implemented Live Repository Data Feed (`feat/live-repository-data-feed`):
+- Created deep `RepoDataService` (`src/server/repo-data-service.js`):
+  - Parsed all real tasks from `backlog/tasks/*.md` (35 tasks: 29 Done, 6 To Do/Planning) with YAML frontmatter mapping to Kanban stages (`planning`, `in_progress`, `review`, `qa`, `done`), priority badges, and crew identity owners.
+  - Queried real pull requests from `gh pr list` (#15, #14, #13, etc.) with additions, deletions, branch names, and extracted Problem and Approach sections from PR markdown bodies; provided git merge fallback.
+  - Inspected live repository state via git commands: repository name, active branch (`feat/live-repository-data-feed`), active worktrees count, working tree clean/modified status, and last commit timestamp.
+  - Aggregated live analytics & KPIs: delivered task count (29 tasks), active turn concurrency from `TurnScheduler`, line counts (+44k / -3.9k).
+- Added endpoints in `SupervisorServer` (`src/server/supervisor-server.js`):
+  - `GET /api/v1/tasks`: returns real backlog tasks array.
+  - `GET /api/v1/pull-requests`: returns live PR array.
+  - `GET /api/v1/repositories`: returns active repositories & worktrees.
+  - `GET /api/v1/analytics`: returns live KPIs and engineering metrics.
+- Updated Web UI client (`src/server/public/app.js`):
+  - Connected `loadTasks()` to `/api/v1/tasks` dynamically populating Kanban board columns.
+  - Added `loadRealRepositoryData()` fetching `/api/v1/pull-requests`, `/api/v1/repositories`, and `/api/v1/analytics`.
+  - Added author avatar fallback using Dicebear bots seed for GitHub logins (`inegmdev`, `Claude`).
+- Added unit and contract tests in `test/server/repo-data-service.test.js` and `test/server/http-api.test.js`.
+- All 75 tests passing green (`npm test`). Server daemon restarted and serving live data on `http://127.0.0.1:3000`.

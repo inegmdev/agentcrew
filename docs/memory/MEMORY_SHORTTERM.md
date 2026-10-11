@@ -150,3 +150,13 @@ Added `agentcrew iterate [goal]` CLI command in `bin/wizard.js` orchestrating fu
 iteration lifecycles. Connected interactive operator command execution bar in Web UI
 Takeover Console (`session.exec`) streaming outputs directly to the terminal log.
 All 53 unit, contract, and workflow tests passing green.
+
+Created branch `feat/dogfooding-and-packaging` to support self-hosting / dogfooding:
+- Added `importFromBacklog()` to `RequirementsManager` and connected `--from-backlog` flag to
+  `agentcrew iterate` in `bin/wizard.js` and `IterationRunner`, dynamically executing pending
+  tasks directly from `backlog/tasks/*.md`.
+- Verified `npm pack` tarball contents: all Web UI static assets, pixel-room engine, logo.jpeg,
+  and scripts are properly bundled.
+- Tested installation of packaged tarball (`agentcrew-0.5.0.tgz`) into an external isolated
+  repository (`/tmp/external-agentcrew-test`): executed `npx agentcrew iterate` and verified
+  `SupervisorServer` serves Web UI and `logo.jpeg` with HTTP 200. 54 tests passing green.

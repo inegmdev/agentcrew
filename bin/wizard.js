@@ -161,25 +161,32 @@ async function runServer(portArg, extraArgs = []) {
   process.on('SIGTERM', shutdown);
 }
 
-async function runIterate(goalArg, extraArgs) {
+async function runIterate(goalArg, extraArgs = []) {
   const repoPath = process.cwd();
   console.log(`\n=== agentcrew iterate: ${path.basename(repoPath)} ===`);
   const runner = new IterationRunner({
     baseDir: path.join(repoPath, '.scratch')
   });
 
-  const goal = goalArg || 'Deliver AI Team Workspace iteration';
+  const fromBacklog = extraArgs.includes('--from-backlog') || !goalArg || goalArg === '--from-backlog';
+  const goal = goalArg && !goalArg.startsWith('--') ? goalArg : 'Complete active iteration tasks from backlog';
   console.log(`  Goal: ${goal}`);
+  console.log(`  Task Source: ${fromBacklog ? 'Repo Backlog (backlog/tasks/*.md)' : 'Custom Requirements'}`);
   console.log(`  Initializing 13 agent identities and running TDD cycles…`);
 
   const result = await runner.runIteration({
     repoPath,
     iterationGoal: goal,
-    rawRequirements: 'id,title,priority\nREQ-01,Verify multi-turn workflows,high\nREQ-02,Commit-bound QA approvals,high'
+    fromBacklog,
   });
 
   console.log(`\n  Iteration finished with status: ${result.status}`);
   console.log(`  Completed tasks: ${result.completedTasks ? result.completedTasks.length : 0}`);
+  if (result.completedTasks && result.completedTasks.length > 0) {
+    result.completedTasks.forEach(t => {
+      console.log(`    ✔ [${t.taskId}] ${t.title}`);
+    });
+  }
   console.log(`  Identities active: ${result.rosterCount}`);
   console.log(`  Acceptance bundle: ${result.acceptanceChecklistPassed ? 'VERIFIED (100% pass yield)' : 'FAILED'}\n`);
 }

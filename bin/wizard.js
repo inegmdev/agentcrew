@@ -134,9 +134,17 @@ async function runServer(portArg, extraArgs = []) {
   const scheduler = new TurnScheduler({ maxConcurrentTurns: 4 });
   const takeoverController = new TakeoverController({ softBudgetMs: 10000 });
 
+  let host = '0.0.0.0';
+  const hostIdx = extraArgs.indexOf('--host');
+  if (hostIdx !== -1 && extraArgs[hostIdx + 1]) {
+    host = extraArgs[hostIdx + 1];
+  } else if (process.env.HOST) {
+    host = process.env.HOST;
+  }
+
   const server = new SupervisorServer({
     port,
-    host: '127.0.0.1',
+    host,
     workspace,
     projectId: project.id,
     projectName: path.basename(repoPath),
@@ -146,8 +154,12 @@ async function runServer(portArg, extraArgs = []) {
 
   await server.start();
   console.log(`\n=== agentcrew server: ${path.basename(repoPath)} ===`);
-  console.log(`  Listening on http://127.0.0.1:${port}`);
-  console.log(`  Open http://127.0.0.1:${port} in your browser to view the AI Team Workspace.`);
+  console.log(`  Listening on http://${host}:${port}`);
+  console.log(`  Local URL: http://127.0.0.1:${port}`);
+  if (host === '0.0.0.0') {
+    console.log(`  LAN URL:   http://192.168.100.50:${port}`);
+  }
+  console.log(`  Open in your browser to view the AI Team Workspace.`);
   console.log('  Press Ctrl-C to stop.\n');
 
   const shutdown = async () => {

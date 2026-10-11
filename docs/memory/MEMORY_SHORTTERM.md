@@ -173,3 +173,11 @@ Reconciled backlog and implemented WebSocket PTY interface on branch `feat/pty-t
 - Created TASK-28 in backlog and verified all acceptance criteria.
 - Added comprehensive unit and contract tests in `test/server/pty-terminal.test.js`.
 - All 56 tests passing green.
+
+Connected Code Review Assistant directly to live agent backend (`feat/live-agent-ask-endpoint`):
+- Added `agent.ask` command handler in `SupervisorServer` (`src/server/supervisor-server.js`)
+  dispatching questions to targeted agent identities (Arthur Architect, QA Lead, or PR Author).
+- Connected Web UI Code Review Drawer (`src/server/public/app.js`) to POST `/api/v1/commands`
+  with `command_type: 'agent.ask'`, passing PR number, title, question, and author.
+- Added automated contract test in `test/server/http-api.test.js`.
+- All 57 tests passing green.

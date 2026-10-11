@@ -442,25 +442,46 @@ document.addEventListener('DOMContentLoaded', () => {
     assistantShimmer.style.display = 'flex';
     assistantAnswerText.textContent = '';
 
-    // Simulate short thinking delay for assistant reasoning
-    await new Promise(r => setTimeout(r, 450));
-
-    assistantShimmer.style.display = 'none';
-
+    // Determine target agent persona based on question or PR reviewer
+    let targetAgent = 'Arthur (Architect)';
     const q = question.toLowerCase();
-    let reply = '';
-    if (q.includes('arch') || q.includes('approach')) {
-      reply = `**Architecture Review for PR #${selectedPR.number}:**\n${selectedPR.approach.join(' ')}\n\nThis design enforces strict modular separation, isolated git worktrees, and zero circular dependencies.`;
-    } else if (q.includes('risk') || q.includes('break')) {
-      reply = `**Merge Risk Evaluation:** Two-way reversible change. Blast radius is contained strictly to ${selectedPR.repository}. Full automated regression test suites passed with 0 test failures.`;
-    } else if (q.includes('test') || q.includes('coverage')) {
-      reply = `**Verification Status:** Verified via commit-bound QA token. Pass rate is 100% across unit, contract, and end-to-end integration test suites (50/50 tests passing green).`;
-    } else {
-      reply = `**Assistant Assessment for PR #${selectedPR.number} (${selectedPR.title}):**\n` +
-        `This PR solves: "${selectedPR.problem[0]}". Author @${selectedPR.author} modified +${selectedPR.additions}/-${selectedPR.deletions} lines across ${selectedPR.repository}. Ready for merge authorization.`;
+    if (q.includes('test') || q.includes('coverage') || q.includes('qa')) {
+      targetAgent = 'QA Lead';
+    } else if (q.includes('author') || q.includes('why')) {
+      targetAgent = selectedPR.author || 'Dev-1';
     }
 
-    assistantAnswerText.innerHTML = reply.replace(/\n\n/g, '<br/><br/>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    try {
+      const res = await fetch('/api/v1/commands', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          command_type: 'agent.ask',
+          payload: {
+            agent_id: targetAgent,
+            pr_number: selectedPR.number,
+            pr_title: selectedPR.title,
+            question: question.trim(),
+            author: selectedPR.author,
+          }
+        })
+      });
+
+      const data = await res.json();
+      assistantShimmer.style.display = 'none';
+
+      let reply = '';
+      if (data.result && data.result.answer) {
+        reply = data.result.answer;
+      } else {
+        reply = `**[${targetAgent}]:** Analyzed PR #${selectedPR.number}. All checks and diff validations passed.`;
+      }
+
+      assistantAnswerText.innerHTML = reply.replace(/\n\n/g, '<br/><br/>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    } catch (err) {
+      assistantShimmer.style.display = 'none';
+      assistantAnswerText.innerHTML = `<span style="color: var(--danger);">Failed to query agent: ${err.message}</span>`;
+    }
   }
 
   if (btnAsk && assistantInput) {

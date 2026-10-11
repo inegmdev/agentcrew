@@ -11,6 +11,7 @@ const { VirtualTeamRoom } = require('../ui/team-room');
 const { IterationRunner } = require('../workflow/iteration-runner');
 const { WebSocketConnection } = require('./websocket');
 const { PtyManager } = require('../session/pty-manager');
+const { which } = require('../lib/shell');
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -39,6 +40,8 @@ class SupervisorServer {
     this.teamRoom = options.teamRoom || new VirtualTeamRoom();
     this.staticDir = options.staticDir || path.join(__dirname, 'public');
     this.ptyManager = options.ptyManager || new PtyManager({ cwd: this.repoPath });
+    // When true, chat replies come from the real provider CLIs (agy/codex); tests disable this.
+    this.liveProviders = options.liveProviders !== false;
 
     this.eventBus = options.eventBus || new EventEmitter();
     this.sseClients = new Set();
@@ -528,60 +531,88 @@ class SupervisorServer {
       gitInfo = gitCheck.stdout ? `(Head: ${gitCheck.stdout})` : '';
     } catch (_) {}
 
+    // Find agent definition to identify assigned role and configured provider
+    let agentRole = 'Agent';
+    let agentProvider = 'agy';
+    if (this.workspace && this.projectId) {
+      try {
+        const agents = await this.workspace.listAgents(this.projectId);
+        const match = agents.find(a => a.name.toLowerCase() === agentId.toLowerCase() || a.id === agentId);
+        if (match) {
+          agentRole = match.role;
+          agentProvider = match.provider || 'agy';
+        }
+      } catch (_) {}
+    } else {
+      const knownRoles = {
+        'Alice': { role: 'Business Analyst', provider: 'agy' },
+        'Peter': { role: 'Product Owner', provider: 'agy' },
+        'Arthur': { role: 'Architect', provider: 'codex' },
+        'Dev-1': { role: 'Developer', provider: 'codex' },
+        'Dev-2': { role: 'Developer', provider: 'codex' },
+        'Dev-3': { role: 'Developer', provider: 'agy' },
+        'Dev-4': { role: 'Developer', provider: 'agy' },
+        'QA-1': { role: 'Tester', provider: 'gemini' },
+        'QA-2': { role: 'Tester', provider: 'gemini' },
+        'QA-3': { role: 'Tester', provider: 'agy' },
+        'QA-4': { role: 'Tester', provider: 'agy' },
+        'Integrator-1': { role: 'Integrator', provider: 'codex' },
+        'Integrator-2': { role: 'Integrator', provider: 'agy' }
+      };
+      if (knownRoles[agentId]) {
+        agentRole = knownRoles[agentId].role;
+        agentProvider = knownRoles[agentId].provider;
+      }
+    }
+
+    // Attempt real LLM CLI execution via installed agy or codex
+    const promptInstructions = `You are ${agentId}, the ${agentRole} in an autonomous engineering team workspace. The repository has commit: ${gitInfo}. The human operator asks or says: "${prompt}". Answer concisely and authoritatively directly from your role's perspective (2-4 sentences max).`;
+
+    try {
+      if (!this.liveProviders) {
+        // offline mode: fall through to heuristic fallback
+      } else if (agentProvider === 'agy' && which('agy')) {
+        const cliRes = await this.ptyManager.execute(`agy --print ${JSON.stringify(promptInstructions)}`, { cwd: this.repoPath, timeoutMs: 15000 });
+        if (cliRes && cliRes.stdout && !cliRes.timedOut) {
+          const text = cliRes.stdout.trim();
+          return text.startsWith(agentId) ? text : `[${agentId} (${agentRole})]: ${text}`;
+        }
+      } else if (agentProvider === 'codex' && which('codex')) {
+        const cliRes = await this.ptyManager.execute(`codex exec ${JSON.stringify(promptInstructions)}`, { cwd: this.repoPath, timeoutMs: 15000 });
+        if (cliRes && cliRes.stdout && !cliRes.timedOut) {
+          const lines = cliRes.stdout.split('\n');
+          const codexIdx = lines.findIndex(l => l.trim() === 'codex');
+          let text = '';
+          if (codexIdx !== -1 && lines[codexIdx + 1]) {
+            text = lines.slice(codexIdx + 1).filter(l => !l.startsWith('tokens used') && !l.startsWith('--------')).join('\n').trim();
+          } else {
+            text = cliRes.stdout.trim();
+          }
+          return text.startsWith(agentId) ? text : `[${agentId} (${agentRole})]: ${text}`;
+        }
+      } else if (which('agy')) {
+        const cliRes = await this.ptyManager.execute(`agy --print ${JSON.stringify(promptInstructions)}`, { cwd: this.repoPath, timeoutMs: 15000 });
+        if (cliRes && cliRes.stdout && !cliRes.timedOut) {
+          const text = cliRes.stdout.trim();
+          return text.startsWith(agentId) ? text : `[${agentId} (${agentRole})]: ${text}`;
+        }
+      }
+    } catch (_) {}
+
+    // Fallback heuristic response if CLI is unavailable or offline
     const lower = prompt.toLowerCase();
     const id = agentId.toLowerCase();
 
-    // Alice (Business Analyst)
     if (id.includes('alice')) {
-      if (lower.includes('hi') || lower.includes('hello') || lower.includes('hey')) {
-        return `Hello Operator! I'm Alice, your Business Analyst. I'm actively managing requirements intake, user story refinement, and backlog traceability ${gitInfo}. How can I assist the team today?`;
-      }
-      if (lower.includes('status') || lower.includes('working') || lower.includes('do')) {
-        return `Currently monitoring iteration requirements. All high-priority stories have acceptance criteria defined and aligned with the architecture specs.`;
-      }
-      return `Requirement review noted: "${prompt}". I'll trace this against our acceptance criteria and joint planning baseline.`;
-    }
-
-    // Peter (Product Owner)
-    if (id.includes('peter')) {
       if (lower.includes('hi') || lower.includes('hello')) {
-        return `Hello! Peter here, Product Owner. Overseeing iteration delivery targets and scope adjustments (P-xxx tickets). What priorities need alignment?`;
+        return `[Alice (Business Analyst)]: Hello Operator! How can I assist the team today? ${gitInfo}`;
       }
-      return `Scope and delivery perspective on "${prompt}": Iteration velocity is solid, and work items are progressing smoothly.`;
+      return `[Alice (Business Analyst)]: Noted "${prompt}". (offline fallback: provider CLI unavailable)`;
     }
-
-    // Arthur (Architect)
     if (id.includes('arthur')) {
-      if (lower.includes('hi') || lower.includes('hello')) {
-        return `Greetings Operator. Arthur (Architect) here. Technical standards, modular seam isolation, and design review gates are active ${gitInfo}.`;
-      }
-      return `Architectural analysis on "${prompt}": Ensuring strict bounded contexts, interface isolation, and zero cyclical dependencies across modules.`;
+      return `[Arthur (Architect)]: Architectural assessment: Technical standards and modular seam boundaries are maintained ${gitInfo}.`;
     }
-
-    // QA agents
-    if (id.includes('qa')) {
-      if (lower.includes('hi') || lower.includes('hello')) {
-        return `Ready for test verification! All unit and integration suites are monitored with commit-bound cryptographic signatures.`;
-      }
-      return `Test verification lead: Evaluated "${prompt}". Acceptance test fixtures and regression checks are running clean.`;
-    }
-
-    // Integrator agents
-    if (id.includes('integrator')) {
-      if (lower.includes('hi') || lower.includes('hello')) {
-        return `Integrator online. Managing branch integration, rebase conflict detection, and stage gating.`;
-      }
-      return `Branch synchronization report on "${prompt}": Clean tree state, awaiting authorized merge instructions.`;
-    }
-
-    // Developers (Dev-1 .. Dev-4)
-    if (lower.includes('hi') || lower.includes('hello') || lower.includes('hey')) {
-      return `Hey Operator! ${agentId} here at my station ${gitInfo}. I'm ready to write code, inspect diffs, or execute tasks. What should we tackle?`;
-    }
-    if (lower.includes('status') || lower.includes('working')) {
-      return `Working on current task worktree. Code changes are structured with red-green TDD test cycles.`;
-    }
-    return `Acknowledged "${prompt}". Processing task context in active worktree (${this.repoPath}).`;
+    return `[${agentId}]: Acknowledged "${prompt}". Processing task context in active worktree (${this.repoPath}).`;
   }
 }
 

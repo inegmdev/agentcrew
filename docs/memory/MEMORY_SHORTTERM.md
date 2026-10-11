@@ -187,3 +187,13 @@ Piped chat boxes across Web UI to real CLI execution (`feat/pipe-all-chats-to-cl
 - Connected `session.exec` and `agent.ask` in `SupervisorServer` to execute against real shell process and active PTY sessions in the repository workspace.
 - Grounded PR review responses with live git verification data (`git log -n 1 --oneline`) and active terminal notifications.
 - All 57 tests passing green.
+
+Connected Takeover Console to Agent Persona Reasoning & Fixed Terminal Output:
+- Diagnosed takeover chat silence: interactive bash child process was interpreting natural language text like "Hi" as missing shell binaries without conversational reasoning, while ANSI/OSC terminal escape sequences (`]2;...`, `]7;...`) cluttered the web terminal.
+- Implemented `generateAgentResponse(agentId, prompt)` in `SupervisorServer` (`src/server/supervisor-server.js`):
+  - Automatically identifies whether an input is a standard shell command (`ls`, `git`, `cd`, `npm`, etc.) or conversational dialogue.
+  - Generates specialized role responses for Alice (Business Analyst), Peter (Product Owner), Arthur (Architect), Dev-1..Dev-4 (Developers), QA-1..QA-4 (Testers), and Integrators grounded with live git commit state.
+  - Emits real-time SSE `agent_answered` events updating visual speech bubbles over agent characters in the 2.5D Isometric Team Room.
+- Sanitized raw ANSI escape sequences and OSC window title/CWD escape codes in `app.js` (`ptySocket.onmessage`).
+- Fixed `loadReadiness()` in `app.js` and `GET /api/v1/readiness` to gracefully supply `qualified_providers`, resolving the `forEach of undefined` client error.
+- All 58 tests passing green (`npm test`). Server running cleanly on `0.0.0.0:3000`.

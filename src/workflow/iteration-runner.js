@@ -28,23 +28,40 @@ class IterationRunner {
     this.teamRoom = new VirtualTeamRoom();
   }
 
-  async runIteration({ repoPath, iterationGoal, rawRequirements } = {}) {
+  async runIteration({ repoPath, iterationGoal, rawRequirements, fromBacklog } = {}) {
+    const resolvedRepo = repoPath || process.cwd();
     // 1. Initialize Workspace & 13 Agent Roster
-    const project = await this.workspace.initProject({ repoPath, name: 'AI Team Workspace' });
+    const project = await this.workspace.initProject({ repoPath: resolvedRepo, name: 'AI Team Workspace' });
     const agents = await this.workspace.listAgents(project.id);
 
-    // 2. Import Requirements (BA / Customer)
-    const imported = await this.requirements.importRequirements({
-      type: 'csv',
-      filename: 'requirements.csv',
-      content: rawRequirements,
-    });
+    // 2. Import Requirements (BA / Customer / Backlog)
+    let imported;
+    if (fromBacklog) {
+      imported = await this.requirements.importFromBacklog({ repoPath: resolvedRepo });
+    } else if (rawRequirements) {
+      imported = await this.requirements.importRequirements({
+        type: 'csv',
+        filename: 'requirements.csv',
+        content: rawRequirements,
+      });
+    } else {
+      // Auto-fallback: check if repo has backlog/tasks/
+      imported = await this.requirements.importFromBacklog({ repoPath: resolvedRepo });
+      if (imported.items.length === 0) {
+        imported = await this.requirements.importRequirements({
+          type: 'csv',
+          filename: 'requirements.csv',
+          content: 'id,title,priority\nREQ-01,Verify multi-turn workflows,high\nREQ-02,Commit-bound QA approvals,high',
+        });
+      }
+    }
 
     // 3. Joint Planning Package (PO / Architect / BA)
     const pkg = await this.requirements.createPlanningPackage({
       iterationGoal,
       requirements: imported.items.map(i => i.id),
       tasks: imported.items.map(i => ({
+        id: i.id,
         title: i.title,
         dod: [`Implementation complete for ${i.title}`, `Tests green`],
       })),
@@ -59,7 +76,7 @@ class IterationRunner {
     const completedTasks = [];
     for (let i = 0; i < pkg.tasks.length; i++) {
       const taskDef = pkg.tasks[i];
-      const taskId = `TASK-E2E-${i + 1}`;
+      const taskId = taskDef.id || `TASK-E2E-${i + 1}`;
       const devName = `Dev-${(i % 4) + 1}`;
 
       await this.taskLifecycle.claimTask({ taskId, agentName: devName });

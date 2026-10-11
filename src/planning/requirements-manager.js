@@ -53,6 +53,45 @@ class RequirementsManager {
     };
   }
 
+  async importFromBacklog({ repoPath } = {}) {
+    const tasksDir = path.join(repoPath || process.cwd(), 'backlog', 'tasks');
+    const items = [];
+    if (fs.existsSync(tasksDir)) {
+      const entries = fs.readdirSync(tasksDir);
+      for (const entry of entries) {
+        if (!entry.endsWith('.md')) continue;
+        const filePath = path.join(tasksDir, entry);
+        const content = fs.readFileSync(filePath, 'utf8');
+        const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+        if (match) {
+          const fields = {};
+          for (const line of match[1].split(/\r?\n/)) {
+            const kv = line.match(/^(id|status|title|priority):\s*(.*)$/);
+            if (kv) fields[kv[1]] = kv[2].replace(/^["'](.*)["']$/, '$1').trim();
+          }
+          if (fields.id && fields.status !== 'Done') {
+            items.push({
+              id: fields.id,
+              title: fields.title || entry.replace('.md', ''),
+              description: `Backlog task from ${entry} (status: ${fields.status})`,
+              priority: fields.priority || 'medium',
+            });
+          }
+        }
+      }
+    }
+
+    const hash = crypto.createHash('sha256').update(JSON.stringify(items)).digest('hex');
+    const id = `req-backlog-${hash.slice(0, 8)}`;
+    return {
+      id,
+      filename: 'backlog/tasks',
+      hash,
+      itemCount: items.length,
+      items,
+    };
+  }
+
   async createPlanningPackage({ iterationGoal, requirements, tasks, acceptanceChecklist } = {}) {
     const id = `pkg-${crypto.randomUUID().slice(0, 8)}`;
     const pkg = {

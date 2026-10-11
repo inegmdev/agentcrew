@@ -52,3 +52,33 @@ test('RequirementsManager creates joint planning package for operator approval',
 
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
+
+test('RequirementsManager imports active tasks directly from repo backlog', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agentcrew-backlog-'));
+  const tasksDir = path.join(tmpDir, 'backlog', 'tasks');
+  fs.mkdirSync(tasksDir, { recursive: true });
+
+  fs.writeFileSync(path.join(tasksDir, 'task-1 - Auth.md'), `---
+id: TASK-1
+title: Auth Service
+status: To Do
+priority: high
+---
+## Details
+`);
+  fs.writeFileSync(path.join(tasksDir, 'task-2 - Complete.md'), `---
+id: TASK-2
+title: Done Item
+status: Done
+---
+`);
+
+  const manager = new RequirementsManager({ storageDir: path.join(tmpDir, 'reqs') });
+  const imported = await manager.importFromBacklog({ repoPath: tmpDir });
+
+  assert.equal(imported.itemCount, 1);
+  assert.equal(imported.items[0].id, 'TASK-1');
+  assert.equal(imported.items[0].title, 'Auth Service');
+
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});

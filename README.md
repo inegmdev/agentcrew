@@ -177,6 +177,13 @@ sequenceDiagram
     Supervisor-->>Agent: Revalidate assignment & resume autonomous flow
 ```
 
+**How chat in the Takeover Console is routed today**
+
+- Shell-looking input (`ls`, `git`, `npm`, …) runs in the repo via an interactive `bash` over the `/api/v1/pty` WebSocket.
+- Anything else is a conversational message: the supervisor calls the agent's provider CLI (`agy --print` / `codex exec`) with a role prompt plus the repo's HEAD commit, failing over `agy` → `codex`.
+- If every provider fails, the chat shows the real error (e.g. `agy` quota 429) — never a canned reply.
+- Limits: each message is a one-shot call (no conversation memory, ~5–10 s latency) and agents do not yet use their own worktrees or tools. See backlog TASK-29..TASK-36.
+
 ---
 
 ### Step 5: Mid-Flight Scope Changes (Popup Tickets)

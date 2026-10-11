@@ -56,7 +56,7 @@ class CodexAdapter {
     if (!rawLine || !rawLine.trim()) return null;
     try {
       const data = JSON.parse(rawLine.trim());
-      if (data.type === 'item_completed' && data.item && data.item.type === 'agent_message') {
+      if ((data.type === 'item_completed' || data.type === 'item.completed') && data.item && data.item.type === 'agent_message') {
         return {
           type: 'message.assistant',
           text: data.item.text,

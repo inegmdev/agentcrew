@@ -65,3 +65,21 @@ test('SupervisorServer upgrades /api/v1/pty into interactive WebSocket terminal'
   socket.destroy();
   await server.stop();
 });
+
+test('SupervisorServer generateAgentResponse generates persona responses for all agent roles', async () => {
+  const server = new SupervisorServer({ port: 3893 });
+  
+  const aliceRes = await server.generateAgentResponse('Alice', 'Hi');
+  assert.ok(aliceRes.includes('Alice'));
+  assert.ok(aliceRes.includes('Business Analyst'));
+
+  const arthurRes = await server.generateAgentResponse('Arthur', 'Hi');
+  assert.ok(arthurRes.includes('Arthur'));
+  assert.ok(arthurRes.includes('Architect'));
+
+  const devRes = await server.generateAgentResponse('Dev-4', 'Hello');
+  assert.ok(devRes.includes('Dev-4'));
+
+  const qaRes = await server.generateAgentResponse('QA-1', 'Hi');
+  assert.ok(qaRes.includes('test') || qaRes.includes('verification'));
+});

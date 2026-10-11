@@ -587,7 +587,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = await res.json();
       if (!providerBadges) return;
       providerBadges.innerHTML = '';
-      data.qualified_providers.forEach(p => {
+      const list = data.qualified_providers || (data.readiness && data.readiness.configuredProviders) || (data.providers ? data.providers.map(p => p.name) : []);
+      list.forEach(p => {
         const badge = document.createElement('span');
         badge.className = 'badge badge-success';
         badge.textContent = `Provider ${p}: Qualified (0 credentials)`;
@@ -631,9 +632,12 @@ document.addEventListener('DOMContentLoaded', () => {
     sse.addEventListener('agent_answered', (e) => {
       const data = JSON.parse(e.data);
       if (pixelRenderer && data.agent_id) {
-        pixelRenderer.showSpeechBubble(data.agent_id, 'Replying to PR question…', 4000);
+        const bubblePreview = data.answer.replace(/\[\d+m/g, '').replace(/[\r\n]+/g, ' ').slice(0, 28);
+        pixelRenderer.showSpeechBubble(data.agent_id, bubblePreview, 5000);
       }
-      log(`[${data.agent_id}] Response regarding PR #${data.pr_number}: ${data.question}`, 'success');
+      if (data.pr_number && data.pr_number !== 'live') {
+        log(`[${data.agent_id}] Response regarding PR #${data.pr_number}: ${data.question}`, 'success');
+      }
     });
 
     sse.addEventListener('command_executed', (e) => {
@@ -740,10 +744,16 @@ document.addEventListener('DOMContentLoaded', () => {
             log(`[PTY Ready] Session ${msg.sessionId} spawned (cwd: ${msg.cwd})`, 'system');
           } else if (msg.type === 'output') {
             const raw = msg.data;
-            const lines = raw.split(/\r?\n/);
+            const cleaned = raw
+              .replace(/\x1b\][^\x07\x1b]*(\x07|\x1b\\)/g, '')
+              .replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '')
+              .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '');
+
+            const lines = cleaned.split(/\r?\n/);
             lines.forEach((line) => {
-              if (line.trim()) {
-                log(line);
+              const trimmed = line.trim();
+              if (trimmed && !trimmed.startsWith(']2;') && !trimmed.startsWith(']7;')) {
+                log(trimmed);
               }
             });
           }

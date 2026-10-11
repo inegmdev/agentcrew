@@ -237,5 +237,20 @@ Implemented TASK-29 (`feat/task-29-persistent-agent-sessions`):
   - Dev-1 recalled build token `alpha-9482` on turn 2.
 - Added comprehensive unit and contract tests in `test/chat/chat-service.test.js` and `test/workspace/manager.test.js`.
 - All 65 unit, contract, and workflow tests passing green (`npm test`).
-
-
+Implemented Live Repository Data Feed (`feat/live-repository-data-feed`):
+- Created deep `RepoDataService` (`src/server/repo-data-service.js`):
+  - Parsed all real tasks from `backlog/tasks/*.md` (35 tasks: 29 Done, 6 To Do/Planning) with YAML frontmatter mapping to Kanban stages (`planning`, `in_progress`, `review`, `qa`, `done`), priority badges, and crew identity owners.
+  - Queried real pull requests from `gh pr list` (#15, #14, #13, etc.) with additions, deletions, branch names, and extracted Problem and Approach sections from PR markdown bodies; provided git merge fallback.
+  - Inspected live repository state via git commands: repository name, active branch (`feat/live-repository-data-feed`), active worktrees count, working tree clean/modified status, and last commit timestamp.
+  - Aggregated live analytics & KPIs: delivered task count (29 tasks), active turn concurrency from `TurnScheduler`, line counts (+44k / -3.9k).
+- Added endpoints in `SupervisorServer` (`src/server/supervisor-server.js`):
+  - `GET /api/v1/tasks`: returns real backlog tasks array.
+  - `GET /api/v1/pull-requests`: returns live PR array.
+  - `GET /api/v1/repositories`: returns active repositories & worktrees.
+  - `GET /api/v1/analytics`: returns live KPIs and engineering metrics.
+- Updated Web UI client (`src/server/public/app.js`):
+  - Connected `loadTasks()` to `/api/v1/tasks` dynamically populating Kanban board columns.
+  - Added `loadRealRepositoryData()` fetching `/api/v1/pull-requests`, `/api/v1/repositories`, and `/api/v1/analytics`.
+  - Added author avatar fallback using Dicebear bots seed for GitHub logins (`inegmdev`, `Claude`).
+- Added unit and contract tests in `test/server/repo-data-service.test.js` and `test/server/http-api.test.js`.
+- All 75 tests passing green (`npm test`). Server daemon restarted and serving live data on `http://127.0.0.1:3000`.

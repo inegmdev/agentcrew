@@ -13,6 +13,7 @@ const { WebSocketConnection } = require('./websocket');
 const { PtyManager } = require('../session/pty-manager');
 const { TurnScheduler } = require('../scheduler/turn-scheduler');
 const { ChatService } = require('../chat/chat-service');
+const { RepoDataService } = require('./repo-data-service');
 const { which } = require('../lib/shell');
 
 const MIME_TYPES = {
@@ -53,6 +54,8 @@ class SupervisorServer {
       projectId: this.projectId,
       liveProviders: this.liveProviders,
     });
+
+    this.repoDataService = options.repoDataService || new RepoDataService({ repoPath: this.repoPath });
 
     this.eventBus = options.eventBus || new EventEmitter();
     this.sseClients = new Set();
@@ -305,9 +308,27 @@ class SupervisorServer {
     }
 
     if (pathname === '/api/v1/tasks' && method === 'GET') {
-      return this.jsonResponse(res, 200, {
-        tasks: Array.from(this.popupEngine.popups.values())
+      const popupTasks = Array.from(this.popupEngine.popups.values());
+      const tasks = await this.repoDataService.getBacklogTasks(popupTasks);
+      return this.jsonResponse(res, 200, { tasks });
+    }
+
+    if (pathname === '/api/v1/pull-requests' && method === 'GET') {
+      const pullRequests = await this.repoDataService.getPullRequests();
+      return this.jsonResponse(res, 200, { pullRequests });
+    }
+
+    if (pathname === '/api/v1/repositories' && method === 'GET') {
+      const repositories = await this.repoDataService.getRepositories();
+      return this.jsonResponse(res, 200, { repositories });
+    }
+
+    if (pathname === '/api/v1/analytics' && method === 'GET') {
+      const analytics = await this.repoDataService.getAnalytics({
+        scheduler: this.scheduler,
+        popups: Array.from(this.popupEngine.popups.values())
       });
+      return this.jsonResponse(res, 200, { analytics });
     }
 
     if (pathname === '/api/v1/popups' && method === 'GET') {
@@ -466,9 +487,17 @@ class SupervisorServer {
           answer = `**[${agentId}] Merge & Blast Radius Review ${cliOutput}:**\n` +
             `Blast radius is contained strictly within the scoped package. Changes are backward-compatible and two-way reversible. Zero unmanaged upstream dependencies added.`;
         } else {
-          answer = `**[${agentId} Response to @operator ${cliOutput}]:**\n` +
-            `Regarding "${question}" on PR #${prNumber}:\n` +
-            `Author @${author} implemented this change to fulfill the iteration requirement. Verified clean diff and ready for integrator review and operator merge.`;
+          if (this.liveProviders && this.chatService) {
+            try {
+              const prompt = `[Code Review Query for PR #${prNumber} "${prTitle}"]: ${question}`;
+              answer = await this.chatService.generateResponse(agentId, prompt);
+            } catch (_) {}
+          }
+          if (!answer) {
+            answer = `**[${agentId} Response to @operator ${cliOutput}]:**\n` +
+              `Regarding "${question}" on PR #${prNumber}:\n` +
+              `Author @${author} implemented this change to fulfill the iteration requirement. Verified clean diff and ready for integrator review and operator merge.`;
+          }
         }
 
         result = {

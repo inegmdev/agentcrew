@@ -332,7 +332,10 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     prs.forEach(pr => {
-      const author = analyticsData.people.find(p => p.handle === pr.author) || { name: pr.author, avatar: '' };
+      const author = analyticsData.people.find(p => p.handle === pr.author) || {
+        name: pr.author,
+        avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${pr.author}`
+      };
       const card = document.createElement('div');
       card.className = `pr-card-item ${selectedPR && selectedPR.number === pr.number ? 'selected' : ''}`;
       card.dataset.number = pr.number;
@@ -373,7 +376,10 @@ document.addEventListener('DOMContentLoaded', () => {
       el.classList.toggle('selected', Number(el.dataset.number) === pr.number);
     });
 
-    const author = analyticsData.people.find(p => p.handle === pr.author) || { name: pr.author, avatar: '' };
+    const author = analyticsData.people.find(p => p.handle === pr.author) || {
+      name: pr.author,
+      avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${pr.author}`
+    };
 
     document.getElementById('pr-panel-title').textContent = pr.title;
     document.getElementById('pr-panel-status').textContent = pr.status.label;
@@ -386,10 +392,12 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('pr-panel-comments').textContent = `${pr.comments} comments`;
 
     const probEl = document.getElementById('pr-panel-problem');
-    if (probEl) probEl.innerHTML = pr.problem.map(p => `<p>${p}</p>`).join('');
+    const problems = Array.isArray(pr.problem) ? pr.problem : [pr.problem || 'No description provided.'];
+    if (probEl) probEl.innerHTML = problems.map(p => `<p>${p}</p>`).join('');
 
     const appEl = document.getElementById('pr-panel-approach');
-    if (appEl) appEl.innerHTML = pr.approach.map(a => `<p>${a}</p>`).join('');
+    const approaches = Array.isArray(pr.approach) ? pr.approach : [pr.approach || 'No approach summary provided.'];
+    if (appEl) appEl.innerHTML = approaches.map(a => `<p>${a}</p>`).join('');
 
     // Reset Assistant response
     const respBox = document.getElementById('assistant-response-card');
@@ -824,20 +832,33 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Load Tasks into Kanban
   async function loadTasks() {
-    const tasks = [
-      { id: 'TASK-13', title: 'Provider Qualification Spikes (agy, Codex, Gemini)', stage: 'done', owner: 'Arthur (Architect)' },
-      { id: 'TASK-14', title: 'Workspace SQLite Schema & 13 Agent Identities', stage: 'done', owner: 'Dev-1' },
-      { id: 'TASK-15', title: 'Provider Plugin Engine & 4-Turn Scheduler', stage: 'done', owner: 'Dev-2' },
-      { id: 'TASK-16', title: 'Browser Session Takeover with 10s Soft Budget', stage: 'done', owner: 'Dev-3' },
-      { id: 'TASK-17', title: 'Requirements Intake & Joint Planning Package', stage: 'review', owner: 'Alice (BA)' },
-      { id: 'TASK-18', title: 'Worktree Task Lifecycle & Design Reviews', stage: 'qa', owner: 'QA-1 (Tester)' },
-      { id: 'TASK-19', title: 'Commit-Bound Approvals & Revision Invalidation', stage: 'done', owner: 'Dev-4' },
-      { id: 'TASK-20', title: 'Iteration Branch Integration Strategy', stage: 'in_progress', owner: 'Integrator-1' },
-      { id: 'TASK-21', title: 'Popup Scope Change Engine (P-xxx)', stage: 'planning', owner: 'Peter (PO)' },
-      { id: 'TASK-25', title: 'Supervisor HTTP & SSE Server Daemon', stage: 'done', owner: 'Dev-1' },
-      { id: 'TASK-26', title: 'Interactive Web UI Full-Screen Dashboards', stage: 'done', owner: 'Dev-2' },
-      { id: 'TASK-27', title: 'CLI Server Command & User Workflow', stage: 'done', owner: 'Dev-3' }
-    ];
+    let tasks = [];
+    try {
+      const res = await fetch('/api/v1/tasks');
+      const data = await res.json();
+      if (Array.isArray(data.tasks) && data.tasks.length > 0) {
+        tasks = data.tasks;
+      }
+    } catch (err) {
+      console.warn('Failed to fetch tasks from /api/v1/tasks:', err);
+    }
+
+    if (tasks.length === 0) {
+      tasks = [
+        { id: 'TASK-13', title: 'Provider Qualification Spikes (agy, Codex, Gemini)', stage: 'done', owner: 'Arthur (Architect)' },
+        { id: 'TASK-14', title: 'Workspace SQLite Schema & 13 Agent Identities', stage: 'done', owner: 'Dev-1' },
+        { id: 'TASK-15', title: 'Provider Plugin Engine & 4-Turn Scheduler', stage: 'done', owner: 'Dev-2' },
+        { id: 'TASK-16', title: 'Browser Session Takeover with 10s Soft Budget', stage: 'done', owner: 'Dev-3' },
+        { id: 'TASK-17', title: 'Requirements Intake & Joint Planning Package', stage: 'review', owner: 'Alice (BA)' },
+        { id: 'TASK-18', title: 'Worktree Task Lifecycle & Design Reviews', stage: 'qa', owner: 'QA-1 (Tester)' },
+        { id: 'TASK-19', title: 'Commit-Bound Approvals & Revision Invalidation', stage: 'done', owner: 'Dev-4' },
+        { id: 'TASK-20', title: 'Iteration Branch Integration Strategy', stage: 'in_progress', owner: 'Integrator-1' },
+        { id: 'TASK-21', title: 'Popup Scope Change Engine (P-xxx)', stage: 'planning', owner: 'Peter (PO)' },
+        { id: 'TASK-25', title: 'Supervisor HTTP & SSE Server Daemon', stage: 'done', owner: 'Dev-1' },
+        { id: 'TASK-26', title: 'Interactive Web UI Full-Screen Dashboards', stage: 'done', owner: 'Dev-2' },
+        { id: 'TASK-27', title: 'CLI Server Command & User Workflow', stage: 'done', owner: 'Dev-3' }
+      ];
+    }
 
     ['planning', 'in_progress', 'review', 'qa', 'done'].forEach(stage => {
       const col = document.getElementById(`tasks-${stage}`);
@@ -847,14 +868,52 @@ document.addEventListener('DOMContentLoaded', () => {
       stageTasks.forEach(task => {
         const item = document.createElement('div');
         item.className = 'task-item';
+        const prioBadge = task.priority === 'high' ? '<span class="badge badge-warning" style="font-size:0.65rem; padding: 2px 6px;">high</span>' : '';
         item.innerHTML = `
-          <div class="task-id">${task.id}</div>
-          <div class="task-title" style="font-weight:600; font-size:0.85rem;">${task.title}</div>
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 4px;">
+            <span class="task-id" style="font-weight:700;">${task.id}</span>
+            ${prioBadge}
+          </div>
+          <div class="task-title" style="font-weight:600; font-size:0.85rem; line-height: 1.3; margin-bottom: 4px;">${task.title}</div>
           <div class="task-owner" style="font-size:0.75rem; color:var(--text-muted);">${task.owner}</div>
         `;
         col.appendChild(item);
       });
     });
+  }
+
+  // Load Real Repository Data & Analytics
+  async function loadRealRepositoryData() {
+    try {
+      // 1. Fetch Pull Requests from live repo
+      const prRes = await fetch('/api/v1/pull-requests');
+      const prData = await prRes.json();
+      if (Array.isArray(prData.pullRequests) && prData.pullRequests.length > 0) {
+        analyticsData.pullRequests = prData.pullRequests;
+        renderPRList('all');
+        selectPR(analyticsData.pullRequests[0]);
+      }
+
+      // 2. Fetch Repositories & Worktrees from live repo
+      const repoRes = await fetch('/api/v1/repositories');
+      const repoData = await repoRes.json();
+      if (Array.isArray(repoData.repositories) && repoData.repositories.length > 0) {
+        analyticsData.repositories = repoData.repositories;
+        renderRepositories('');
+      }
+
+      // 3. Fetch Analytics & KPIs from live repo
+      const analRes = await fetch('/api/v1/analytics');
+      const analData = await analRes.json();
+      if (analData.analytics) {
+        if (analData.analytics.kpis) {
+          analyticsData.kpis = analData.analytics.kpis;
+        }
+        updateOverview('week');
+      }
+    } catch (err) {
+      console.warn('Failed to load real repository data:', err);
+    }
   }
 
   // --- Initial Boot ---
@@ -871,5 +930,6 @@ document.addEventListener('DOMContentLoaded', () => {
   loadAgents();
   loadReadiness();
   loadTasks();
+  loadRealRepositoryData();
   connectSSE();
 });

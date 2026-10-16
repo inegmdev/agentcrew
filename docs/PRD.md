@@ -445,9 +445,11 @@ dependencies, reviews, last activity, and popup badge. Filter by role/agent, sta
 blocked reason, baseline/popup, and requirement. Opening a card reveals DoD, sources,
 handoffs, candidate revision, and actions allowed in the current state.
 
-**PRD-UI-03 — Team room.** Minimal isometric pixel-art office with named avatars,
-role and real activity badges. Click an agent to open the shared conversation/detail
-view. Simple animation reflects real state; never invent meetings or work. Offer
+**PRD-UI-03 — Team room.** Present a status-grouped agent roster with search and
+filters beside a focused workspace for the selected agent, including its shared
+conversation/session controls. Provide the minimal isometric pixel-art office as a
+secondary map view. Show named identities, role, provider/model, and real activity
+badges. Simple animation reflects real state; never invent meetings or work. Offer
 equivalent keyboard/list navigation, reduced motion, and text labels for state.
 
 **PRD-UI-04 — Sessions and artifacts.** Display user/agent messages, tools, outcomes,

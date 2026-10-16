@@ -2,13 +2,31 @@
 <html lang="en" data-theme="light" data-accent="blue">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>AgentCrew — AI Team Workspace</title>
   <link rel="icon" type="image/jpeg" href="/logo.jpeg">
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
   <div class="app-shell">
+    <header class="mobile-app-bar" aria-label="Mobile application header">
+      <button class="mobile-icon-btn" id="mobile-menu-btn" type="button" aria-label="Open navigation" aria-controls="app-sidebar" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="17" x2="20" y2="17"></line></svg>
+      </button>
+      <div class="mobile-app-identity">
+        <img src="/logo.jpeg" alt="" class="mobile-brand-logo">
+        <div>
+          <strong id="mobile-view-title">Overview</strong>
+          <span><i class="mobile-live-dot" aria-hidden="true"></i>Live workspace</span>
+        </div>
+      </div>
+      <button class="mobile-icon-btn" id="mobile-theme-btn" type="button" aria-label="Toggle color theme">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+      </button>
+    </header>
+
+    <button class="sidebar-backdrop" id="sidebar-backdrop" type="button" aria-label="Close navigation" tabindex="-1"></button>
+
     <!-- Left Sidebar Navbar -->
     <aside class="app-sidebar" id="app-sidebar">
       <div class="sidebar-top">
@@ -20,6 +38,9 @@
             <span class="brand-title">AgentCrew</span>
             <span class="brand-sub">AI Team Workspace</span>
           </div>
+          <button class="mobile-sidebar-close" id="mobile-sidebar-close" type="button" aria-label="Close navigation">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"></line><line x1="18" y1="6" x2="6" y2="18"></line></svg>
+          </button>
         </div>
 
         <!-- Vertical Navigation Menu -->
@@ -256,79 +277,98 @@
         </div>
       </section>
 
-      <!-- VIEW 1: Virtual Team Room (Full-Screen) -->
+      <!-- VIEW 1: Agent Room Cockpit -->
       <section id="view-team-room" class="fullscreen-view">
         <div class="view-header">
           <div class="header-titles">
-            <h2>Virtual Team Room</h2>
-            <p class="subtitle">2.5D Isometric office with 13 persistent agent identities and real-time state tracking</p>
+            <h2>Agent Room</h2>
+            <p class="subtitle">Your team, live sessions, and human controls in one workspace.</p>
           </div>
           <div class="view-controls">
-            <div class="view-toggles">
-              <button id="toggle-pixel-view" class="btn btn-sm btn-secondary active">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>
-                Isometric Room
-              </button>
-              <button id="toggle-list-view" class="btn btn-sm btn-secondary">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
-                Roster List
-              </button>
-            </div>
+            <button id="toggle-pixel-view" class="btn btn-sm btn-secondary" type="button" aria-expanded="false" aria-controls="room-map-view">Open room map</button>
           </div>
         </div>
 
         <div class="team-room-layout">
-          <!-- Main Canvas Stage -->
-          <div class="canvas-stage">
-            <div id="pixel-room-wrapper" class="pixel-canvas-wrapper">
-              <canvas id="pixel-room-canvas" width="960" height="520"></canvas>
+          <aside class="agent-roster-panel card" aria-label="Agent roster">
+            <div class="agent-roster-heading">
+              <div>
+                <h3>Team</h3>
+                <span id="agent-roster-count" class="subtitle">Loading agents…</span>
+              </div>
+              <span class="live-presence"><i></i> Live</span>
             </div>
-            <div id="team-room-grid" class="isometric-grid" style="display: none;">
-              <!-- 13 Stations populated by app.js as accessible fallback -->
+            <div class="agent-status-summary" id="agent-status-summary" aria-label="Agent status counts"></div>
+            <label class="agent-search-wrap" for="agent-search">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m16 16 4 4"></path></svg>
+              <input id="agent-search" type="search" placeholder="Search agents…" autocomplete="off">
+              <kbd>/</kbd>
+            </label>
+            <div class="agent-roster-filters" role="group" aria-label="Filter agents">
+              <button type="button" class="agent-filter active" data-agent-filter="all" aria-pressed="true">All</button>
+              <button type="button" class="agent-filter" data-agent-filter="needs-you" aria-pressed="false">Needs you</button>
+              <button type="button" class="agent-filter" data-agent-filter="working" aria-pressed="false">Working</button>
+            </div>
+            <div id="team-room-grid" class="agent-roster-list" aria-label="Agents"></div>
+          </aside>
+
+          <div class="agent-room-main">
+            <section class="agent-workspace card" aria-labelledby="selected-agent-name">
+              <header class="agent-workspace-header">
+                <div class="agent-profile">
+                  <span id="selected-agent-avatar" class="agent-profile-avatar" aria-hidden="true"></span>
+                  <div class="agent-profile-copy">
+                    <div class="agent-name-line">
+                      <h3 id="selected-agent-name">Choose an agent</h3>
+                      <span id="selected-agent-status" class="agent-state-pill">Loading</span>
+                    </div>
+                    <p id="selected-agent-role" class="subtitle">Select a teammate from the roster.</p>
+                    <div class="agent-provider-line">
+                      <span id="selected-agent-provider" class="provider-pill">AgentCrew</span>
+                      <span id="selected-agent-model" class="subtitle"></span>
+                    </div>
+                  </div>
+                </div>
+                <div class="agent-workspace-actions">
+                  <span id="takeover-state-badge" class="badge">Auto</span>
+                  <button id="btn-takeover" class="btn btn-sm btn-primary" type="button">Take over</button>
+                  <button id="btn-release" class="btn btn-sm btn-secondary" type="button" disabled>Release</button>
+                </div>
+              </header>
+
+              <div class="agent-workspace-context">
+                <div class="agent-context-heading">
+                  <div>
+                    <span class="eyebrow">Current assignment</span>
+                    <p id="selected-agent-task" class="agent-task-title">No active task assigned</p>
+                  </div>
+                  <span id="selected-agent-id" class="agent-id-label"></span>
+                </div>
+                <p id="selected-agent-guidance" class="agent-context-copy">Take over this session to send a prompt or run a command in the agent’s live terminal.</p>
+              </div>
+
+              <div class="agent-console-heading">
+                <div>
+                  <h4>Session</h4>
+                  <span id="agent-session-caption" class="subtitle">Live output appears here when a session is connected.</span>
+                </div>
+                <span class="console-presence"><i></i> <span id="agent-session-state">Ready</span></span>
+              </div>
+              <div id="takeover-terminal" class="terminal-log agent-session-output" aria-live="polite" aria-label="Agent session output">
+                <div class="term-line system">[System] Select an agent to inspect its session.</div>
+              </div>
+              <div class="takeover-input-bar agent-composer">
+                <input type="text" id="takeover-command-input" placeholder="Take over to send a prompt or command…" aria-label="Prompt or command for selected agent" disabled>
+                <button id="btn-send-command" class="btn btn-sm btn-primary" type="button" disabled>Send</button>
+              </div>
+            </section>
+
+            <div class="canvas-stage room-map-view" id="room-map-view" hidden>
+              <div id="pixel-room-wrapper" class="pixel-canvas-wrapper">
+                <canvas id="pixel-room-canvas" width="960" height="520" aria-label="Isometric agent room map"></canvas>
+              </div>
             </div>
           </div>
-
-          <!-- Integrated Takeover & Inspector Dock -->
-          <aside class="takeover-dock card" id="takeover-panel">
-            <div class="card-header">
-              <h3>Session Takeover & Inspector</h3>
-              <span class="badge" id="takeover-state-badge">Auto</span>
-            </div>
-            <div class="card-body">
-              <p class="section-desc">10-second soft budget pause to quiesce autonomous turns for human intervention.</p>
-              <div class="takeover-controls">
-                <div class="form-row">
-                  <label for="takeover-agent-select">Target Identity</label>
-                  <select id="takeover-agent-select">
-                    <option value="Dev-1">Dev-1 (Developer / Codex)</option>
-                    <option value="Dev-2">Dev-2 (Developer / Codex)</option>
-                    <option value="Dev-3">Dev-3 (Developer / agy)</option>
-                    <option value="Dev-4">Dev-4 (Developer / agy)</option>
-                    <option value="Arthur">Arthur (Architect / Codex)</option>
-                    <option value="Alice">Alice (BA / agy)</option>
-                    <option value="Peter">Peter (PO / agy)</option>
-                    <option value="QA-1">QA-1 (Tester / Gemini)</option>
-                    <option value="QA-2">QA-2 (Tester / Gemini)</option>
-                    <option value="QA-3">QA-3 (Tester / agy)</option>
-                    <option value="QA-4">QA-4 (Tester / agy)</option>
-                    <option value="Integrator-1">Integrator-1 (Integrator / Codex)</option>
-                    <option value="Integrator-2">Integrator-2 (Integrator / agy)</option>
-                  </select>
-                </div>
-                <div class="action-buttons">
-                  <button id="btn-takeover" class="btn btn-warning">Initiate Takeover</button>
-                  <button id="btn-release" class="btn btn-success" disabled>Release Takeover</button>
-                </div>
-              </div>
-              <div id="takeover-terminal" class="terminal-log">
-                <div class="term-line system">[System] Ready. Click any station in the isometric room to inspect.</div>
-              </div>
-              <div class="takeover-input-bar">
-                <input type="text" id="takeover-command-input" placeholder="Enter operator command or instruction..." disabled>
-                <button id="btn-send-command" class="btn btn-sm btn-primary" disabled>Execute</button>
-              </div>
-            </div>
-          </aside>
         </div>
       </section>
 
@@ -358,8 +398,10 @@
             </div>
           </div>
 
+          <button class="pr-panel-backdrop" id="pr-panel-backdrop" type="button" aria-label="Close pull request details"></button>
+
           <!-- Docked Details Panel (≥1180px docked, <1180px slide-over overlay) -->
-          <aside class="pr-details-dock card" id="pr-details-panel">
+          <aside class="pr-details-dock card" id="pr-details-panel" aria-label="Pull request details" aria-hidden="false">
             <div class="dock-header">
               <div class="dock-header-meta">
                 <span class="badge" id="pr-panel-status">Under Review</span>
@@ -707,6 +749,29 @@
       </section>
 
     </main>
+
+    <nav class="mobile-bottom-nav" aria-label="Primary mobile navigation">
+      <button class="mobile-nav-tab active" type="button" data-view="view-overview" aria-label="Overview">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+        <span>Overview</span>
+      </button>
+      <button class="mobile-nav-tab" type="button" data-view="view-team-room" aria-label="Team room">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 19.5z"></path><path d="M9 21v-7h6v7"></path></svg>
+        <span>Team</span>
+      </button>
+      <button class="mobile-nav-tab" type="button" data-view="view-kanban" aria-label="Tasks and flow">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="9" y1="4" x2="9" y2="20"></line><line x1="15" y1="4" x2="15" y2="20"></line></svg>
+        <span>Tasks</span>
+      </button>
+      <button class="mobile-nav-tab" type="button" data-view="view-reviews" aria-label="Code reviews">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="6" cy="6" r="2.5"></circle><circle cx="18" cy="18" r="2.5"></circle><path d="M8.5 6H16a2 2 0 0 1 2 2v7.5"></path><path d="M6 8.5V21"></path></svg>
+        <span>Reviews</span>
+      </button>
+      <button class="mobile-nav-tab mobile-more-tab" id="mobile-more-btn" type="button" aria-label="More navigation" aria-controls="app-sidebar" aria-expanded="false">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"></circle><circle cx="12" cy="12" r="1.6"></circle><circle cx="19" cy="12" r="1.6"></circle></svg>
+        <span>More</span>
+      </button>
+    </nav>
   </div>
 
   <script src="/analytics-dashboard-data.js"></script>

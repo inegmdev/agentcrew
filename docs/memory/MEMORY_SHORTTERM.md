@@ -254,3 +254,30 @@ Implemented Live Repository Data Feed (`feat/live-repository-data-feed`):
   - Added author avatar fallback using Dicebear bots seed for GitHub logins (`inegmdev`, `Claude`).
 - Added unit and contract tests in `test/server/repo-data-service.test.js` and `test/server/http-api.test.js`.
 - All 75 tests passing green (`npm test`). Server daemon restarted and serving live data on `http://127.0.0.1:3000`.
+
+## 2026-10-12
+
+Updated the cloud checkout from the older installer-only snapshot to current `main`
+(`7eb5c0b`) and ran the real AgentCrew AI Team Workspace through an HTTPS
+Tunnelmole endpoint. Reworked the dashboard for mobile and tablet use while
+preserving the desktop visual system: sticky mobile app bar, five-destination
+bottom navigation, accessible secondary-navigation drawer, safe-area support,
+44px touch targets, responsive KPI and content grids, roster-first Team Room,
+swipeable Kanban columns, and an accessible pull-request details bottom sheet.
+Added reduced-motion behavior and fixed narrow-screen wrapping/overflow in the
+review assistant. Chromium checks at 320, 390, 768, 1024, and 1440px found no
+document overflow; all 75 tests and the focused 8-test UI bundle suite passed.
+Added a compact motion system for directional view changes, mode and analytics
+refreshes, theme changes, tap feedback, navigation state, and interruptible
+drawer/review-sheet transitions, with a reduced-motion path. Fixed the mobile
+review sheet's minimum width so its close control stays on-screen and works at
+phone widths.
+
+## 2026-10-16
+
+Compared AgentCrew's Team Room with the live AgentsRoom demo and reshaped the
+default view into a status-grouped agent roster with search and filters beside
+a selected-agent workspace, session output, takeover controls, and prompt
+composer. Kept the isometric map available as a secondary view. Connected roster
+status and takeover ownership to the live agent API, used local initials instead
+of remote avatar images, and checked desktop and phone layouts with Playwright.

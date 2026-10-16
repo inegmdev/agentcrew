@@ -141,7 +141,7 @@ cross-project aggregation is outside v1.
 |---|---|
 | Server/runtime | Node 24; keep existing CommonJS modules; new server contracts use JSDoc plus runtime validation |
 | UI | React + TypeScript, built with Vite; static bundle served by supervisor; no development server needed for installed use |
-| Team room | CSS/HTML isometric layout and local sprite assets; accessible roster alternative; no game engine needed for v1 |
+| Team room | CSS/HTML status-grouped roster and selected-agent workspace by default; accessible isometric map as a secondary view; no game engine needed for v1 |
 | UI transport | Same-origin HTTP JSON commands/queries and one replayable Server-Sent Events stream per workspace tab |
 | Storage | node:sqlite, WAL, foreign keys, one worker/writer; content-addressed local blobs |
 | Parsing | Maintained YAML/frontmatter, CSV, and sanitized Markdown libraries; pin versions and licenses during implementation |

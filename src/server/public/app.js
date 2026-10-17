@@ -17,6 +17,15 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnRelease = document.getElementById('btn-release');
   const agentSelect = document.getElementById('takeover-agent-select');
   const stateBadge = document.getElementById('takeover-state-badge');
+  const agentSearchInput = document.getElementById('agent-search');
+  const agentRosterCount = document.getElementById('agent-roster-count');
+  const agentStatusSummary = document.getElementById('agent-status-summary');
+  const agentFilterButtons = document.querySelectorAll('.agent-filter[data-agent-filter]');
+  const roomMapView = document.getElementById('room-map-view');
+  const teamRoomView = document.getElementById('view-team-room');
+  let liveAgents = [];
+  let selectedAgentName = '';
+  let activeAgentFilter = 'all';
 
   function log(text, type = 'system') {
     if (!terminal) return;
@@ -29,9 +38,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- Theme & Appearance Accent Management ---
   const themeToggleBtn = document.getElementById('theme-toggle-btn');
+  const mobileThemeBtn = document.getElementById('mobile-theme-btn');
   const themeLabelText = document.getElementById('theme-label-text');
 
-  function applyTheme(theme) {
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const motionEase = 'cubic-bezier(0.16, 1, 0.3, 1)';
+  let themeTransitionTimer = null;
+
+  function applyTheme(theme, animate = false) {
+    if (animate) {
+      document.body.classList.add('theme-transitioning');
+      window.clearTimeout(themeTransitionTimer);
+      themeTransitionTimer = window.setTimeout(() => {
+        document.body.classList.remove('theme-transitioning');
+      }, 220);
+    }
     document.documentElement.setAttribute('data-theme', theme);
     if (themeLabelText) {
       themeLabelText.textContent = theme === 'dark' ? 'Theme: Dark' : 'Theme: Light';
@@ -85,9 +106,7 @@ document.addEventListener('DOMContentLoaded', () => {
     pixelRenderer = new PixelRoomRenderer(canvas, {
       theme: initialTheme,
       onAgentClick: (agent) => {
-        if (agentSelect) {
-          agentSelect.value = agent.name;
-        }
+        selectAgentByName(agent.name);
         log(`Inspecting ${agent.name} (${agent.role}) via isometric station`, 'system');
       }
     });
@@ -99,22 +118,92 @@ document.addEventListener('DOMContentLoaded', () => {
     themeToggleBtn.addEventListener('click', () => {
       const current = document.documentElement.getAttribute('data-theme') || 'light';
       const next = current === 'dark' ? 'light' : 'dark';
-      applyTheme(next);
+      applyTheme(next, true);
       log(`Switched interface theme to ${next}`, 'system');
     });
   }
 
+  if (mobileThemeBtn) {
+    mobileThemeBtn.addEventListener('click', () => {
+      const current = document.documentElement.getAttribute('data-theme') || 'light';
+      applyTheme(current === 'dark' ? 'light' : 'dark', true);
+    });
+  }
+
   // --- Full-Screen Navigation Tabs ---
-  const navTabs = document.querySelectorAll('.nav-tab');
+  const navTabs = document.querySelectorAll('.nav-tab, .mobile-nav-tab[data-view]');
   const views = document.querySelectorAll('.fullscreen-view');
+  const appSidebar = document.getElementById('app-sidebar');
+  const sidebarBackdrop = document.getElementById('sidebar-backdrop');
+  const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+  const mobileMoreBtn = document.getElementById('mobile-more-btn');
+  const mobileSidebarClose = document.getElementById('mobile-sidebar-close');
+  const mobileViewTitle = document.getElementById('mobile-view-title');
+  const viewLabels = {
+    'view-overview': 'Overview',
+    'view-team-room': 'Agent Room',
+    'view-reviews': 'Code Review',
+    'view-kanban': 'Tasks & Flow',
+    'view-repositories': 'Repositories',
+    'view-observability': 'Observability',
+    'view-settings': 'Settings'
+  };
+  const viewOrder = Object.keys(viewLabels);
+  let viewAnimation = null;
+
+  function animateElement(element, keyframes, options) {
+    if (!element || typeof element.animate !== 'function') return null;
+    return element.animate(keyframes, { easing: motionEase, fill: 'both', ...options });
+  }
+
+  function setMobileDrawer(open) {
+    if (!appSidebar) return;
+    appSidebar.classList.toggle('open', open);
+    document.body.classList.toggle('mobile-drawer-open', open);
+    if (sidebarBackdrop) sidebarBackdrop.classList.toggle('visible', open);
+    if (mobileMenuBtn) mobileMenuBtn.setAttribute('aria-expanded', String(open));
+    if (mobileMoreBtn) mobileMoreBtn.setAttribute('aria-expanded', String(open));
+  }
 
   function switchView(targetViewId) {
+    const currentView = document.querySelector('.fullscreen-view.active');
+    if (!document.getElementById(targetViewId) || currentView?.id === targetViewId) {
+      setMobileDrawer(false);
+      return;
+    }
+    const direction = viewOrder.indexOf(targetViewId) >= viewOrder.indexOf(currentView?.id) ? 1 : -1;
+    if (targetViewId !== 'view-reviews' && typeof selectedPR !== 'undefined' && selectedPR) {
+      closePRPanel();
+    }
     views.forEach(v => {
       v.classList.toggle('active', v.id === targetViewId);
     });
     navTabs.forEach(t => {
       t.classList.toggle('active', t.dataset.view === targetViewId);
+      if (t.dataset.view === targetViewId) t.setAttribute('aria-current', 'page');
+      else t.removeAttribute('aria-current');
     });
+    if (mobileViewTitle) mobileViewTitle.textContent = viewLabels[targetViewId] || 'AgentCrew';
+    if (mobileMoreBtn) {
+      const secondaryViews = ['view-repositories', 'view-observability', 'view-settings'];
+      mobileMoreBtn.classList.toggle('active', secondaryViews.includes(targetViewId));
+    }
+    setMobileDrawer(false);
+    const dashboard = document.querySelector('.dashboard-container');
+    if (dashboard) dashboard.scrollTo({ top: 0, behavior: 'auto' });
+
+    const targetView = document.getElementById(targetViewId);
+    if (viewAnimation) viewAnimation.cancel();
+    viewAnimation = animateElement(
+      targetView,
+      reducedMotion.matches
+        ? [{ opacity: 0.72 }, { opacity: 1 }]
+        : [
+            { opacity: 0, transform: `translateX(${direction * 12}px)`, clipPath: 'inset(0 0 7% 0 round 12px)' },
+            { opacity: 1, transform: 'translateX(0)', clipPath: 'inset(0 0 0 0 round 12px)' }
+          ],
+      { duration: reducedMotion.matches ? 90 : 180 }
+    );
   }
 
   navTabs.forEach(tab => {
@@ -123,19 +212,39 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  if (btnTogglePixel && btnToggleList) {
-    btnTogglePixel.addEventListener('click', () => {
-      btnTogglePixel.classList.add('active');
-      btnToggleList.classList.remove('active');
-      if (pixelWrapper) pixelWrapper.style.display = 'flex';
-      if (teamRoomGrid) teamRoomGrid.style.display = 'none';
-    });
+  if (mobileMenuBtn) mobileMenuBtn.addEventListener('click', () => setMobileDrawer(true));
+  if (mobileMoreBtn) mobileMoreBtn.addEventListener('click', () => setMobileDrawer(true));
+  if (mobileSidebarClose) mobileSidebarClose.addEventListener('click', () => setMobileDrawer(false));
+  if (sidebarBackdrop) sidebarBackdrop.addEventListener('click', () => setMobileDrawer(false));
 
-    btnToggleList.addEventListener('click', () => {
-      btnToggleList.classList.add('active');
-      btnTogglePixel.classList.remove('active');
-      if (pixelWrapper) pixelWrapper.style.display = 'none';
-      if (teamRoomGrid) teamRoomGrid.style.display = 'grid';
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && appSidebar && appSidebar.classList.contains('open')) {
+      setMobileDrawer(false);
+      if (mobileMenuBtn) mobileMenuBtn.focus();
+    }
+  });
+
+  window.matchMedia('(min-width: 901px)').addEventListener('change', event => {
+    if (event.matches) setMobileDrawer(false);
+  });
+
+  if (btnTogglePixel && roomMapView && teamRoomView) {
+    btnTogglePixel.addEventListener('click', () => {
+      const openMap = roomMapView.hidden;
+      roomMapView.hidden = !openMap;
+      teamRoomView.classList.toggle('map-view-active', openMap);
+      btnTogglePixel.setAttribute('aria-expanded', String(openMap));
+      btnTogglePixel.textContent = openMap ? 'Back to agent room' : 'Open room map';
+      if (openMap) {
+        pixelWrapper.style.display = 'flex';
+        animateElement(
+          roomMapView,
+          reducedMotion.matches
+            ? [{ opacity: 0.8 }, { opacity: 1 }]
+            : [{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'translateY(0)' }],
+          { duration: reducedMotion.matches ? 90 : 180 }
+        );
+      }
     });
   }
 
@@ -211,7 +320,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
   rangeBtns.forEach(btn => {
     btn.addEventListener('click', () => {
+      if (btn.dataset.range === activeRange) return;
       updateOverview(btn.dataset.range);
+      const overview = document.getElementById('view-overview');
+      overview?.querySelectorAll('.kpi-card').forEach((card, index) => {
+        animateElement(
+          card,
+          reducedMotion.matches
+            ? [{ opacity: 0.78 }, { opacity: 1 }]
+            : [{ opacity: 0.55, transform: 'translateY(5px)' }, { opacity: 1, transform: 'translateY(0)' }],
+          { duration: reducedMotion.matches ? 90 : 160, delay: reducedMotion.matches ? 0 : index * 18 }
+        );
+      });
+      const chart = document.querySelector('.activity-chart-card');
+      animateElement(
+        chart,
+        reducedMotion.matches
+          ? [{ opacity: 0.8 }, { opacity: 1 }]
+          : [{ opacity: 0.65, clipPath: 'inset(0 3% 0 0)' }, { opacity: 1, clipPath: 'inset(0 0 0 0)' }],
+        { duration: reducedMotion.matches ? 90 : 200 }
+      );
     });
   });
 
@@ -318,8 +446,14 @@ document.addEventListener('DOMContentLoaded', () => {
   let selectedPR = null;
   const prItemsList = document.getElementById('pr-items-list');
   const detailsPanel = document.getElementById('pr-details-panel');
+  const prPanelBackdrop = document.getElementById('pr-panel-backdrop');
   const closeDockBtn = document.getElementById('close-pr-panel-btn');
+  let prPanelReturnFocus = null;
   let activeFilter = 'all';
+
+  if (detailsPanel && window.matchMedia('(max-width: 1180px)').matches) {
+    detailsPanel.setAttribute('aria-hidden', 'true');
+  }
 
   function renderPRList(filter = 'all') {
     activeFilter = filter;
@@ -336,9 +470,11 @@ document.addEventListener('DOMContentLoaded', () => {
         name: pr.author,
         avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${pr.author}`
       };
-      const card = document.createElement('div');
+      const card = document.createElement('button');
+      card.type = 'button';
       card.className = `pr-card-item ${selectedPR && selectedPR.number === pr.number ? 'selected' : ''}`;
       card.dataset.number = pr.number;
+      card.setAttribute('aria-label', `Open pull request ${pr.number}: ${pr.title}`);
 
       const statusBadgeClass = pr.status.kind === 'merged' ? 'badge-success' : (pr.status.kind === 'review' ? 'badge-warning' : '');
 
@@ -371,6 +507,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function selectPR(pr) {
+    prPanelReturnFocus = document.activeElement;
     selectedPR = pr;
     document.querySelectorAll('.pr-card-item').forEach(el => {
       el.classList.toggle('selected', Number(el.dataset.number) === pr.number);
@@ -404,7 +541,15 @@ document.addEventListener('DOMContentLoaded', () => {
     if (respBox) respBox.style.display = 'none';
 
     if (detailsPanel) {
-      detailsPanel.style.display = 'flex';
+      detailsPanel.style.removeProperty('display');
+      if (!window.matchMedia('(max-width: 1180px)').matches) {
+        detailsPanel.style.display = 'flex';
+      }
+      detailsPanel.setAttribute('aria-hidden', 'false');
+      if (window.matchMedia('(max-width: 1180px)').matches) {
+        document.body.classList.add('pr-panel-open');
+        if (closeDockBtn) closeDockBtn.focus();
+      }
     }
   }
 
@@ -412,12 +557,25 @@ document.addEventListener('DOMContentLoaded', () => {
     selectedPR = null;
     document.querySelectorAll('.pr-card-item').forEach(el => el.classList.remove('selected'));
     if (detailsPanel) {
-      detailsPanel.style.display = 'none';
+      detailsPanel.setAttribute('aria-hidden', 'true');
+      if (!window.matchMedia('(max-width: 1180px)').matches) {
+        detailsPanel.style.display = 'none';
+      } else {
+        detailsPanel.style.removeProperty('display');
+      }
     }
+    document.body.classList.remove('pr-panel-open');
+    if (prPanelReturnFocus && typeof prPanelReturnFocus.focus === 'function') {
+      prPanelReturnFocus.focus();
+    }
+    prPanelReturnFocus = null;
   }
 
   if (closeDockBtn) {
     closeDockBtn.addEventListener('click', closePRPanel);
+  }
+  if (prPanelBackdrop) {
+    prPanelBackdrop.addEventListener('click', closePRPanel);
   }
 
   // Escape key closes panel
@@ -557,31 +715,227 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  const agentStatusMeta = {
+    'needs-you': { label: 'Needs you', group: 'Needs you' },
+    working: { label: 'Working', group: 'Working' },
+    review: { label: 'To review', group: 'To review' },
+    available: { label: 'Ready', group: 'Available' }
+  };
+
+  function getAgentStatus(agent) {
+    const raw = String(agent.activity_badge || agent.state || 'idle').toLowerCase().replace(/[ _]+/g, '-');
+    if (/takeover|human-owned|waiting|blocked|stuck|needs-input|needs-you/.test(raw)) return 'needs-you';
+    if (/review|approval/.test(raw)) return 'review';
+    if (/working|running|active|thinking/.test(raw)) return 'working';
+    return 'available';
+  }
+
+  function isAgentHumanOwned(agent) {
+    const raw = String(agent?.state || agent?.activity_badge || '').toLowerCase().replace(/[ _]+/g, '-');
+    return raw === 'takeover' || raw === 'human-owned' || raw === 'human-owned-session';
+  }
+
+  function getAgentColor(agent) {
+    const person = analyticsData.people.find(p => p.name.toLowerCase() === String(agent.name).toLowerCase());
+    return person?.color || 'var(--accent-primary)';
+  }
+
+  function updateAgentWorkspace(agent) {
+    if (!agent) return;
+    const nameEl = document.getElementById('selected-agent-name');
+    const avatarEl = document.getElementById('selected-agent-avatar');
+    const statusEl = document.getElementById('selected-agent-status');
+    const owned = isAgentHumanOwned(agent);
+    const status = getAgentStatus(agent);
+    const statusLabel = owned ? 'Human owned' : agentStatusMeta[status].label;
+    const stateText = document.getElementById('agent-session-state');
+
+    if (nameEl) nameEl.textContent = agent.name;
+    if (avatarEl) {
+      avatarEl.textContent = agent.name.slice(0, 2).toUpperCase();
+      avatarEl.style.setProperty('--agent-avatar-color', getAgentColor(agent));
+    }
+    if (statusEl) {
+      statusEl.textContent = statusLabel;
+      statusEl.dataset.state = status;
+      statusEl.classList.toggle('is-human-owned', owned);
+    }
+    const roleEl = document.getElementById('selected-agent-role');
+    if (roleEl) roleEl.textContent = agent.role || 'Agent';
+    const providerEl = document.getElementById('selected-agent-provider');
+    if (providerEl) providerEl.textContent = String(agent.provider || 'Provider').toUpperCase();
+    const modelEl = document.getElementById('selected-agent-model');
+    if (modelEl) modelEl.textContent = agent.model || '';
+    const taskEl = document.getElementById('selected-agent-task');
+    const taskId = agent.active_task_id || agent.activeTaskId;
+    if (taskEl) taskEl.textContent = taskId ? `Task ${taskId}` : 'No active task assigned';
+    const idEl = document.getElementById('selected-agent-id');
+    if (idEl) idEl.textContent = agent.id ? `ID ${String(agent.id).slice(0, 8)}` : '';
+    const guidanceEl = document.getElementById('selected-agent-guidance');
+    if (guidanceEl) guidanceEl.textContent = owned
+      ? 'You have control of this session. Send a prompt or run a command below.'
+      : 'Take over this session to send a prompt or run a command in the agent’s live terminal.';
+    const captionEl = document.getElementById('agent-session-caption');
+    if (captionEl) captionEl.textContent = owned
+      ? 'Connected to the selected agent’s live terminal.'
+      : 'Live output appears here when a session is connected.';
+    if (stateBadge) stateBadge.textContent = owned ? 'Human owned' : 'Auto';
+    if (btnTakeover) btnTakeover.disabled = owned;
+    if (btnRelease) btnRelease.disabled = !owned;
+    if (cmdInput) cmdInput.disabled = !owned;
+    if (btnSendCmd) btnSendCmd.disabled = !owned;
+    if (stateText) stateText.textContent = owned ? 'Connected' : statusLabel;
+    if (agentSelect && agentSelect.value !== agent.name) agentSelect.value = agent.name;
+  }
+
+  function renderAgentRoster() {
+    if (!teamRoomGrid) return;
+    teamRoomGrid.replaceChildren();
+    const query = (agentSearchInput?.value || '').trim().toLowerCase();
+    const filtered = liveAgents.filter(agent => {
+      const status = getAgentStatus(agent);
+      const matchesFilter = activeAgentFilter === 'all' || status === activeAgentFilter;
+      const text = `${agent.name} ${agent.role} ${agent.provider} ${agent.model}`.toLowerCase();
+      return matchesFilter && (!query || text.includes(query));
+    });
+    const groups = [
+      ['needs-you', 'Needs you'],
+      ['working', 'Working'],
+      ['review', 'To review'],
+      ['available', 'Available']
+    ];
+
+    groups.forEach(([status, label]) => {
+      const agents = filtered.filter(agent => getAgentStatus(agent) === status);
+      if (!agents.length) return;
+      const group = document.createElement('section');
+      group.className = `agent-status-group status-${status}`;
+      const heading = document.createElement('h4');
+      heading.className = 'agent-status-heading';
+      heading.innerHTML = `<span>${label}</span><span>${agents.length}</span>`;
+      group.appendChild(heading);
+
+      agents.forEach(agent => {
+        const row = document.createElement('button');
+        const humanOwned = isAgentHumanOwned(agent);
+        row.type = 'button';
+        row.className = 'agent-roster-row';
+        row.dataset.agentName = agent.name;
+        row.dataset.status = status;
+        row.setAttribute('aria-pressed', String(agent.name === selectedAgentName));
+        row.setAttribute('aria-label', `${agent.name}, ${agent.role || 'Agent'}, ${humanOwned ? 'human owned' : agentStatusMeta[status].label}`);
+
+        const avatar = document.createElement('span');
+        avatar.className = 'agent-roster-avatar';
+        avatar.textContent = agent.name.slice(0, 2).toUpperCase();
+        avatar.style.setProperty('--agent-avatar-color', getAgentColor(agent));
+        avatar.setAttribute('aria-hidden', 'true');
+        const identity = document.createElement('span');
+        identity.className = 'agent-roster-identity';
+        const name = document.createElement('strong');
+        name.textContent = agent.name;
+        const meta = document.createElement('span');
+        meta.textContent = `${agent.role || 'Agent'} · ${agent.provider || 'Provider'}`;
+        identity.append(name, meta);
+        const presence = document.createElement('i');
+        presence.className = `agent-presence-dot ${humanOwned ? 'human-owned' : ''}`;
+        presence.setAttribute('aria-hidden', 'true');
+        row.append(avatar, identity, presence);
+        row.addEventListener('click', () => selectAgent(agent));
+        group.appendChild(row);
+      });
+      teamRoomGrid.appendChild(group);
+    });
+
+    if (!filtered.length) {
+      const empty = document.createElement('p');
+      empty.className = 'agent-roster-empty';
+      empty.textContent = liveAgents.length ? 'No agents match this filter.' : 'No agents are available.';
+      teamRoomGrid.appendChild(empty);
+    }
+
+    if (agentRosterCount) {
+      agentRosterCount.textContent = `${liveAgents.length} ${liveAgents.length === 1 ? 'agent' : 'agents'}`;
+    }
+    const counts = groups.map(([status, label]) => ({ status, label, count: liveAgents.filter(agent => getAgentStatus(agent) === status).length }));
+    if (agentStatusSummary) {
+      agentStatusSummary.replaceChildren();
+      counts.forEach(({ status, label, count }) => {
+        if (!count) return;
+        const item = document.createElement('div');
+        item.className = `agent-summary-item status-${status}`;
+        item.innerHTML = `<i aria-hidden="true"></i><strong>${count}</strong><span>${label}</span>`;
+        agentStatusSummary.appendChild(item);
+      });
+    }
+  }
+
+  function selectAgent(agent) {
+    if (!agent) return;
+    const changedAgent = selectedAgentName && selectedAgentName !== agent.name;
+    if (changedAgent && ptySocket) disconnectPty();
+    selectedAgentName = agent.name;
+    updateAgentWorkspace(agent);
+    renderAgentRoster();
+  }
+
+  function selectAgentByName(name) {
+    const agent = liveAgents.find(item => item.name === name);
+    if (agent) selectAgent(agent);
+  }
+
+  agentFilterButtons.forEach(button => {
+    button.addEventListener('click', () => {
+      activeAgentFilter = button.dataset.agentFilter;
+      agentFilterButtons.forEach(item => {
+        const active = item === button;
+        item.classList.toggle('active', active);
+        item.setAttribute('aria-pressed', String(active));
+      });
+      renderAgentRoster();
+    });
+  });
+
+  if (agentSearchInput) agentSearchInput.addEventListener('input', renderAgentRoster);
+  if (agentSelect) agentSelect.addEventListener('change', () => selectAgentByName(agentSelect.value));
+
+  document.addEventListener('keydown', event => {
+    if (event.key === '/' && !event.metaKey && !event.ctrlKey && !event.altKey &&
+      !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) {
+      event.preventDefault();
+      agentSearchInput?.focus();
+    }
+  });
+
   // Load Agent Stations
   async function loadAgents() {
     try {
       const res = await fetch('/api/v1/agents');
       const data = await res.json();
+      liveAgents = Array.isArray(data.agents) ? data.agents : [];
+
+      if (agentSelect) {
+        const current = selectedAgentName || agentSelect.value;
+        agentSelect.replaceChildren();
+        liveAgents.forEach(agent => {
+          const option = document.createElement('option');
+          option.value = agent.name;
+          option.textContent = `${agent.name} · ${agent.role || agent.provider}`;
+          agentSelect.appendChild(option);
+        });
+        if (liveAgents.some(agent => agent.name === current)) agentSelect.value = current;
+      }
 
       if (pixelRenderer && data.agents) {
         pixelRenderer.updateAgentStates(data.agents);
       }
 
       if (teamRoomGrid && data.agents) {
-        teamRoomGrid.innerHTML = '';
-        data.agents.forEach(agent => {
-          const card = document.createElement('div');
-          card.className = 'agent-station-card';
-          card.innerHTML = `
-            <div class="station-header">
-              <span class="station-name">${agent.name}</span>
-              <span class="activity-badge ${agent.activity_badge}">${agent.activity_badge}</span>
-            </div>
-            <div class="station-role">${agent.role}</div>
-            <div class="station-provider">${agent.provider} · ${agent.model}</div>
-          `;
-          teamRoomGrid.appendChild(card);
-        });
+        renderAgentRoster();
+        const selected = liveAgents.find(agent => agent.name === selectedAgentName) ||
+          liveAgents.find(agent => agent.name === agentSelect?.value) ||
+          liveAgents.find(agent => agent.name === 'Dev-1') || liveAgents[0];
+        if (selected) selectAgent(selected);
       }
     } catch (err) {
       log(`Error loading agents: ${err.message}`, 'action');
@@ -666,7 +1020,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Interactive Browser Takeover Cycle
   if (btnTakeover && btnRelease) {
     btnTakeover.addEventListener('click', async () => {
-      const agentId = agentSelect.value;
+      const agentId = selectedAgentName || agentSelect?.value || 'Dev-1';
       log(`Initiating takeover for ${agentId}... (10s soft budget)`, 'action');
       btnTakeover.disabled = true;
 
@@ -696,7 +1050,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     btnRelease.addEventListener('click', async () => {
-      const agentId = agentSelect.value;
+      const agentId = selectedAgentName || agentSelect?.value || 'Dev-1';
       log(`Releasing takeover for ${agentId}...`, 'action');
       btnRelease.disabled = true;
 
@@ -891,7 +1245,9 @@ document.addEventListener('DOMContentLoaded', () => {
       if (Array.isArray(prData.pullRequests) && prData.pullRequests.length > 0) {
         analyticsData.pullRequests = prData.pullRequests;
         renderPRList('all');
-        selectPR(analyticsData.pullRequests[0]);
+        if (window.matchMedia('(min-width: 1181px)').matches) {
+          selectPR(analyticsData.pullRequests[0]);
+        }
       }
 
       // 2. Fetch Repositories & Worktrees from live repo
@@ -922,7 +1278,7 @@ document.addEventListener('DOMContentLoaded', () => {
   renderPRList('all');
   renderRepositories('');
   // Select first PR initially for rich display
-  if (analyticsData.pullRequests.length > 0) {
+  if (analyticsData.pullRequests.length > 0 && window.matchMedia('(min-width: 1181px)').matches) {
     selectPR(analyticsData.pullRequests[0]);
   }
 

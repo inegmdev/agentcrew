@@ -298,10 +298,13 @@ class SupervisorServer {
       const stations = this.teamRoom.getStations();
       const enriched = agents.map((agent, idx) => {
         const station = stations[idx] || null;
+        const liveState = this.teamRoom.getAgentState(agent.name) || { state: 'idle', activeTaskId: null };
         return {
           ...agent,
           station: station ? station.grid_position : null,
-          activity_badge: station ? station.activity_badge : 'idle'
+          state: liveState.state || 'idle',
+          active_task_id: liveState.activeTaskId || null,
+          activity_badge: liveState.state === 'takeover' ? 'needs-you' : (liveState.state || 'idle')
         };
       });
       return this.jsonResponse(res, 200, { agents: enriched });
@@ -390,6 +393,7 @@ class SupervisorServer {
       if (command_type === 'session.takeover') {
         const agentId = payload.agent_id;
         const resObj = await this.takeoverController.requestTakeover();
+        this.teamRoom.updateAgentState(agentId, { state: 'takeover' });
         result = {
           agent_id: agentId,
           state: resObj.state,
@@ -402,6 +406,7 @@ class SupervisorServer {
         const agentId = payload.agent_id;
         const notes = payload.guidance_notes || payload.guidance || '';
         const resObj = await this.takeoverController.release({ guidance: notes });
+        this.teamRoom.updateAgentState(agentId, { state: 'idle', activeTaskId: null });
         result = { agent_id: agentId, state: resObj.state, notes: resObj.guidance };
         this.broadcastEvent('takeover_released', result);
       } else if (command_type === 'session.exec' || command_type === 'session.command') {

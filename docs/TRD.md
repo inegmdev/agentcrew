@@ -856,6 +856,12 @@ reusing an idempotency key return conflict; identical retries return the stored 
 | GET /metrics, /diagnostics | Evidence-linked metrics and findings |
 | GET /events?after=cursor | Authenticated SSE stream with ordered cursor IDs |
 
+The Code Review drawer's `agent.ask` command loads the selected pull request's
+current title, author, description, branches, and diff through `gh`, then sends
+that context with the question through the configured provider CLI. Provider or
+GitHub failures are returned as errors for the drawer to display; no review text
+is synthesized as a fallback.
+
 Command types include initialize/configure, import.confirm, plan.approve,
 iteration.start/pause/resume/recommit/close, task.request_transition,
 assignment.submit_handoff, review.submit, message.send, permission.decide,

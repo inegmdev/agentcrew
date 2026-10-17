@@ -93,6 +93,33 @@ Implement plugins.
     assert.ok(parsed.approach[0].includes('Isolated session storage'));
   });
 
+  await t.test('getPullRequestReviewContext loads metadata and diff as argument arrays', async () => {
+    const service = new RepoDataService({ repoPath: tmpDir });
+    const calls = [];
+    service.execCommand = async (file, args) => {
+      calls.push({ file, args });
+      if (args[1] === 'view') {
+        return { error: null, stderr: '', stdout: JSON.stringify({
+          number: 42,
+          title: 'Review title',
+          author: { login: 'author' },
+          body: 'Review body',
+          baseRefName: 'main',
+          headRefName: 'feature'
+        }) };
+      }
+      return { error: null, stderr: '', stdout: 'diff --git a/file b/file' };
+    };
+    const context = await service.getPullRequestReviewContext(42);
+    assert.equal(context.title, 'Review title');
+    assert.equal(context.author, 'author');
+    assert.equal(context.diff, 'diff --git a/file b/file');
+    assert.deepEqual(calls.map(call => call.args.slice(0, 3)), [
+      ['pr', 'view', '42'],
+      ['pr', 'diff', '42']
+    ]);
+  });
+
   await t.test('getRepositories returns current repository and worktree status', async () => {
     const service = new RepoDataService({ repoPath: process.cwd() });
     const repos = await service.getRepositories();
@@ -100,7 +127,7 @@ Implement plugins.
     assert.ok(Array.isArray(repos));
     assert.ok(repos.length >= 1);
     const mainRepo = repos[0];
-    assert.equal(mainRepo.name, 'agentcrew');
+    assert.equal(mainRepo.name, path.basename(process.cwd()));
     assert.ok(mainRepo.branch);
     assert.ok(mainRepo.status);
     assert.ok(mainRepo.worktreesCount >= 1);

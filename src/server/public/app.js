@@ -635,18 +635,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const data = await res.json();
       assistantShimmer.style.display = 'none';
-
-      let reply = '';
-      if (data.result && data.result.answer) {
-        reply = data.result.answer;
-      } else {
-        reply = `**[${targetAgent}]:** Analyzed PR #${selectedPR.number}. All checks and diff validations passed.`;
-      }
-
-      assistantAnswerText.innerHTML = reply.replace(/\n\n/g, '<br/><br/>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+      if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+      if (!data.result?.answer) throw new Error('Provider returned no review answer');
+      assistantAnswerText.textContent = data.result.answer;
+      assistantAnswerText.style.color = '';
     } catch (err) {
       assistantShimmer.style.display = 'none';
-      assistantAnswerText.innerHTML = `<span style="color: var(--danger);">Failed to query agent: ${err.message}</span>`;
+      assistantAnswerText.textContent = `Failed to query agent: ${err.message}`;
+      assistantAnswerText.style.color = 'var(--danger)';
     }
   }
 

@@ -119,6 +119,34 @@ test('ChatService fails over to next available provider if primary fails', async
   assert.ok(reply.includes('Codex answers'), `Reply must contain failover text: ${reply}`);
 });
 
+test('ChatService includes review context in provider prompt and throws when all providers fail', async () => {
+  let invokedPrompt = '';
+  const mockAgy = new AgyAdapter();
+  mockAgy.buildSpawnArgs = () => ['-p'];
+  const service = new ChatService({
+    liveProviders: true,
+    adapters: { agy: mockAgy },
+    ptyManager: {
+      async executeCommand(_binary, args) {
+        invokedPrompt = args.find(arg => arg.startsWith('-p=')) || '';
+        return { stdout: '', stderr: 'quota exceeded', code: 1 };
+      }
+    },
+    which: bin => bin === 'agy'
+  });
+
+  await assert.rejects(
+    service.generateResponse('Arthur (Architect)', 'Assess this change', {
+      reviewContext: '{"title":"PR context","diff":"changed line"}',
+      throwOnProviderError: true
+    }),
+    /agy: quota exceeded/
+  );
+  assert.match(invokedPrompt, /PR context/);
+  assert.match(invokedPrompt, /changed line/);
+  assert.match(invokedPrompt, /Assess this change/);
+});
+
 test('ChatService preserves provider session ID across multi-turn messages (TASK-29)', async () => {
   const agyCalls = [];
   const mockAgy = new AgyAdapter();

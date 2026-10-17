@@ -33,6 +33,26 @@ test('SupervisorServer serves TRD §12 API routes and SSE stream', async (t) => 
     staticDir: path.join(__dirname, 'fixtures'),
     liveProviders: false
   });
+  let providerFailure = false;
+  let capturedReview = null;
+  server.liveProviders = true;
+  server.repoDataService.getPullRequestReviewContext = async (number) => ({
+    number,
+    title: 'Live provider review title',
+    author: 'review-author',
+    body: 'PR description from GitHub',
+    baseBranch: 'main',
+    headBranch: 'feature/review',
+    diff: 'diff --git a/src/example.js b/src/example.js\n+const reviewed = true;',
+    diffTruncated: false
+  });
+  server.chatService = {
+    async generateResponse(agentId, prompt, options) {
+      capturedReview = { agentId, prompt, options };
+      if (providerFailure) throw new Error('codex: quota exceeded');
+      return '[Arthur (Architect)]: Provider reviewed the supplied diff.';
+    }
+  };
 
   await server.start();
   const address = server.httpServer.address();
@@ -126,7 +146,7 @@ test('SupervisorServer serves TRD §12 API routes and SSE stream', async (t) => 
     assert.equal(listData.popups.length, 1);
   });
 
-  await t.test('POST /api/v1/commands executes agent.ask and returns agent answer', async () => {
+  await t.test('agent.ask sends live PR context to the provider and returns its answer', async () => {
     const askRes = await fetch(`${baseUrl}/api/v1/commands`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -144,8 +164,31 @@ test('SupervisorServer serves TRD §12 API routes and SSE stream', async (t) => 
     assert.equal(askRes.status, 200);
     const askData = await askRes.json();
     assert.equal(askData.status, 'acknowledged');
-    assert.ok(askData.result.answer.includes('Architectural Assessment'));
+    assert.ok(askData.result.answer.includes('Provider reviewed'));
     assert.equal(askData.result.pr_number, 26);
+    assert.equal(askData.result.author, 'review-author');
+    assert.equal(capturedReview.agentId, 'Arthur (Architect)');
+    assert.match(capturedReview.prompt, /Live provider review title/);
+    assert.match(capturedReview.options.reviewContext, /review-author/);
+    assert.match(capturedReview.options.reviewContext, /diff --git a\/src\/example.js/);
+    assert.equal(capturedReview.options.throwOnProviderError, true);
+  });
+
+  await t.test('agent.ask returns provider failures instead of fabricated review text', async () => {
+    providerFailure = true;
+    const askRes = await fetch(`${baseUrl}/api/v1/commands`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        command_type: 'agent.ask',
+        payload: { pr_number: 26, question: 'What changed?' }
+      })
+    });
+    const askData = await askRes.json();
+    assert.equal(askRes.status, 500);
+    assert.match(askData.error, /quota exceeded/);
+    assert.equal(askData.result, undefined);
+    providerFailure = false;
   });
 
   await t.test('GET /api/v1/tasks returns backlog tasks array', async () => {

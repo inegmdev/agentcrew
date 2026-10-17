@@ -281,3 +281,11 @@ a selected-agent workspace, session output, takeover controls, and prompt
 composer. Kept the isometric map available as a secondary view. Connected roster
 status and takeover ownership to the live agent API, used local initials instead
 of remote avatar images, and checked desktop and phone layouts with Playwright.
+
+## 2026-10-18
+
+Implemented TASK-31 on `feat/task-31`: Code Review `agent.ask` obtains selected
+PR metadata and diff from `gh`, supplies them to the provider-backed ChatService,
+and surfaces GitHub/provider failures without generating fallback review text.
+Drawer renders returned text safely. Added API/provider-path, provider-error,
+ChatService context/error, and live PR-context tests. TRD §12 documents behavior.

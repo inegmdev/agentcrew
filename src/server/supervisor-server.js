@@ -459,58 +459,36 @@ class SupervisorServer {
         this.broadcastEvent('popup_created', result);
       } else if (command_type === 'agent.ask') {
         const agentId = payload.agent_id || 'Arthur (Architect)';
-        const prNumber = payload.pr_number;
-        const prTitle = payload.pr_title || `PR #${prNumber}`;
+        const prNumber = Number(payload.pr_number);
         const question = payload.question || '';
-        const author = payload.author || 'Dev-1';
+        if (!Number.isSafeInteger(prNumber) || prNumber < 1) throw new Error('A valid pull request number is required');
+        if (!question.trim()) throw new Error('A review question is required');
+        if (!this.liveProviders || !this.chatService) throw new Error('Live providers are unavailable for code review');
 
-        // Check if there is an active interactive PTY session for this agent to pipe to
-        let cliOutput = '';
-        for (const [sessId, sess] of this.ptyManager.activeSessions) {
-          if (sess.isAlive && sessId.includes(agentId)) {
-            sess.write(`echo "[Ask from operator regarding PR #${prNumber}]: ${question}"\n`);
-          }
-        }
-
-        // Run git log or verification command in repo to ground the CLI answer
-        try {
-          const gitCheck = await this.ptyManager.execute(`git log -n 1 --oneline`, { cwd: this.repoPath });
-          cliOutput = gitCheck.stdout ? `(Head commit: ${gitCheck.stdout})` : '';
-        } catch (_) {}
-
-        // Synthesize agent persona review response based on PR context and assigned role
-        let answer = '';
-        const qLower = question.toLowerCase();
-
-        if (qLower.includes('arch') || qLower.includes('design') || qLower.includes('modular') || qLower.includes('seam')) {
-          answer = `**[${agentId}] Architectural Assessment ${cliOutput}:**\n` +
-            `Reviewed PR #${prNumber} against technical standards. The implementation isolates side effects behind explicit interfaces, conforms to the bounded module boundary, and introduces 0 circular module dependencies. Approved from architectural perspective.`;
-        } else if (qLower.includes('test') || qLower.includes('coverage') || qLower.includes('qa') || qLower.includes('pass')) {
-          answer = `**[QA Lead & Verification ${cliOutput}]:**\n` +
-            `Verification complete for PR #${prNumber} (${prTitle}). All automated suites passed green with revision-bound verification token. Acceptance criteria verified 100%.`;
-        } else if (qLower.includes('risk') || qLower.includes('break') || qLower.includes('blast')) {
-          answer = `**[${agentId}] Merge & Blast Radius Review ${cliOutput}:**\n` +
-            `Blast radius is contained strictly within the scoped package. Changes are backward-compatible and two-way reversible. Zero unmanaged upstream dependencies added.`;
-        } else {
-          if (this.liveProviders && this.chatService) {
-            try {
-              const prompt = `[Code Review Query for PR #${prNumber} "${prTitle}"]: ${question}`;
-              answer = await this.chatService.generateResponse(agentId, prompt);
-            } catch (_) {}
-          }
-          if (!answer) {
-            answer = `**[${agentId} Response to @operator ${cliOutput}]:**\n` +
-              `Regarding "${question}" on PR #${prNumber}:\n` +
-              `Author @${author} implemented this change to fulfill the iteration requirement. Verified clean diff and ready for integrator review and operator merge.`;
-          }
-        }
+        const pr = await this.repoDataService.getPullRequestReviewContext(prNumber);
+        const reviewContext = JSON.stringify({
+          number: pr.number,
+          title: pr.title,
+          author: pr.author,
+          baseBranch: pr.baseBranch,
+          headBranch: pr.headBranch,
+          description: pr.body,
+          diff: pr.diff,
+          diffTruncated: pr.diffTruncated
+        });
+        const prompt = `Review PR #${pr.number} (${pr.title}) by @${pr.author}. Answer the operator's question using the supplied PR metadata and diff. Cite relevant files or hunks when possible, distinguish evidence from uncertainty, and do not claim tests or checks passed unless the diff or provided context proves it.\n\nOperator question: ${question}`;
+        const answer = await this.chatService.generateResponse(agentId, prompt, {
+          reviewContext,
+          throwOnProviderError: true
+        });
 
         result = {
           agent_id: agentId,
           pr_number: prNumber,
           question,
           answer,
-          cli_grounded: Boolean(cliOutput),
+          author: pr.author,
+          cli_grounded: true,
           timestamp: new Date().toISOString()
         };
         this.broadcastEvent('agent_answered', result);

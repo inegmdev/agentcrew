@@ -453,6 +453,16 @@ from a silent session with unknown state.
 
 ### 8.1 Browser chat and takeover
 
+Current takeover implementation adds a real PTY for the assigned provider CLI.
+After a confirmed autonomous quiescence, the supervisor starts a new interactive
+process with the saved provider-native conversation ID (`codex resume
+--include-non-interactive <id>` or `agy --conversation <id>`). This is the same
+conversation, not the same OS process. No saved ID means a visibly new conversation;
+native resume errors must not be presented as successful handoff. Gemini remains
+unqualified and disconnected. A persisted, explicit per-agent backup provider/model
+may be selected only when the primary is unavailable; provider-native IDs are stored
+separately and context is not transferred between providers.
+
 ```mermaid
 sequenceDiagram
     actor Human
@@ -499,9 +509,12 @@ while human-owned would defeat the product and is explicitly replaced by source-
 dispatch and permission checks. A tool already running must finish, stop, or be marked
 uncertain before control is reported as safely acquired.
 
-The Takeover Console selects Chat or Shell explicitly, defaulting to Chat. A leading
-`!` forces one Shell command from Chat mode. Input routing does not infer intent from
-command names; the server enforces human ownership before executing any Shell input.
+The Takeover Console selects Agent CLI or Shell explicitly, defaulting to Agent CLI.
+The CLI channel carries raw keystrokes, resize dimensions, and PTY output over a
+token-bound WebSocket; Shell is a separate channel. A browser disconnect detaches
+display but does not kill the CLI. Same-tab refresh reattaches using a token held
+in sessionStorage. Release waits for CLI and shell process exit before lifting the
+autonomous hold. Input routing does not infer intent from command names.
 
 ### 8.2 Runtime interface
 
@@ -921,13 +934,13 @@ the authenticated connection is restored. Persisted command IDs let the browser 
 results of requests whose HTTP response was lost. Multiple tabs share the same server
 state and optimistic versions; no tab privately owns an approval.
 
-The interactive `/api/v1/pty` WebSocket carries chat turn frames with a stable
-`turn_id`: `chat_started`, ordered `chat_chunk` (`text`), then `chat_completed`
-(`answer`) or `chat_failed` (`error`). A companion SSE `agent_thinking` event starts
-the pixel-room activity badge; `agent_thinking_ended` clears it on completion,
-provider failure, timeout, or socket disconnect. Provider stdout is parsed as
-newline-delimited events and normalized text is forwarded as it arrives; final
-completion remains authoritative for the assembled reply.
+The interactive `/api/v1/pty?mode=agent_tui` WebSocket carries `ready`, raw PTY
+`output`, `input`, `resize`, `error`, and `exit` frames. The browser renders output
+with xterm.js; it must not strip control sequences. Only one live browser socket
+owns an agent PTY at once, though the same tab may reconnect after refresh. The
+headless chat service separately parses newline-delimited provider events and
+forwards only assistant text; metadata-only output is a failed answer, never raw
+JSON shown as dialogue.
 
 ### 12.3 UI composition
 
@@ -951,6 +964,12 @@ Ordinary setup prepares files; it does not auto-start an iteration or authentica
 providers on the user's behalf.
 
 ## 13. Security and access
+
+Implementation warning (2026-10-18): the current dashboard has no authenticated
+browser session or CSRF protection and therefore does **not** meet this target.
+`--host` is an explicit short-lived test switch, not a secure remote deployment.
+The takeover token is an ownership token, not login; any client that can reach
+the HTTP port can acquire control. Keep the default loopback bind for ordinary use.
 
 Bind only to loopback in v1. Validate Host and Origin, deny cross-origin mutations,
 and use an authenticated local browser session plus CSRF protection. Loopback is not

@@ -111,15 +111,16 @@ class ChatService {
     return reports;
   }
 
-  async getAgentSession(agentId) {
-    if (this.sessionCache.has(agentId)) {
-      return this.sessionCache.get(agentId);
+  async getAgentSession(agentId, provider = null) {
+    const cacheKey = `${agentId}:${provider || '*'}`;
+    if (this.sessionCache.has(cacheKey)) {
+      return this.sessionCache.get(cacheKey);
     }
     if (this.workspace && this.projectId) {
       try {
-        const session = await this.workspace.getAgentSession(this.projectId, agentId);
+        const session = await this.workspace.getAgentSession(this.projectId, agentId, provider);
         if (session) {
-          this.sessionCache.set(agentId, session);
+          this.sessionCache.set(cacheKey, session);
           return session;
         }
       } catch (_) {}
@@ -128,7 +129,8 @@ class ChatService {
   }
 
   async saveAgentSession(agentId, sessionData) {
-    this.sessionCache.set(agentId, sessionData);
+    this.sessionCache.set(`${agentId}:${sessionData.provider}`, sessionData);
+    this.sessionCache.set(`${agentId}:*`, sessionData);
     if (this.workspace && this.projectId) {
       try {
         await this.workspace.saveAgentSession(this.projectId, agentId, sessionData);
@@ -172,6 +174,8 @@ class ChatService {
             role: match.role,
             provider: match.provider || 'agy',
             model: match.model || 'gemini-2.5-pro',
+            backupProvider: match.backup_provider || null,
+            backupModel: match.backup_model || null,
           };
         }
       } catch (_) {}
@@ -234,23 +238,31 @@ class ChatService {
       }
 
       // Check for active persistent session for this agent
-      const existingSession = await this.getAgentSession(agent.name);
 
-      // Order providers: agent's assigned provider first, followed by others
-      const order = [agent.provider, 'agy', 'codex']
+      // A provider change is an explicit per-agent operator decision.
+      const order = [agent.provider, agent.backupProvider]
         .filter((p, i, a) => {
-          if (p === 'gemini') return false;
+          if (!p) return false;
           const quota = this.quotaLimits.get(p);
           if (quota?.resetAt && Date.parse(quota.resetAt) <= Date.now()) this.quotaLimits.delete(p);
           const stillLimited = quota && (!quota.resetAt || Date.parse(quota.resetAt) > Date.now());
-          return this.adapters[p] && a.indexOf(p) === i && this.which(p) && !stillLimited;
+          return this.adapters[p] && a.indexOf(p) === i && this.which(this.adapters[p].command || p) && !stillLimited;
         });
 
+      // Gemini is deliberately unqualified today even if a binary appears on PATH.
+      for (const name of [...order]) {
+        if (name !== 'gemini') continue;
+        const report = await this.adapters.gemini.probe?.({ which: this.which });
+        if (!report?.available) order.splice(order.indexOf(name), 1);
+      }
+
       const errors = [];
+      if (!order.includes(agent.provider)) errors.push(`${agent.provider}: unavailable or not installed`);
 
       for (const name of order) {
         if (turnControl.signal.aborted) return `${label}: turn interrupted for takeover`;
         const adapter = this.adapters[name];
+        const existingSession = await this.getAgentSession(agent.name, name);
         try {
           let streamBuffer = '';
           let streamedText = '';
@@ -266,7 +278,6 @@ class ChatService {
             let text = normalized.type === 'message.assistant' ? normalized.text : null;
             if (!text && typeof event.delta === 'string') text = event.delta;
             if (!text && typeof event.text_delta === 'string') text = event.text_delta;
-            if (!text && event.type === 'raw.output') text = event.text;
             if (text) {
               const delta = streamedText && text.startsWith(streamedText)
                 ? text.slice(streamedText.length)
@@ -289,8 +300,9 @@ class ChatService {
           };
           // Model selection: only apply model if calling assigned provider, and avoid obsolete/unsupported placeholders
           let modelArg = null;
-          if (name === agent.provider && agent.model && agent.model !== 'gemini-2.5-pro' && agent.model !== 'o3') {
-            modelArg = agent.model;
+          const configuredModel = name === agent.provider ? agent.model : agent.backupModel;
+          if (configuredModel && (name !== agent.provider || (configuredModel !== 'gemini-2.5-pro' && configuredModel !== 'o3'))) {
+            modelArg = configuredModel;
           }
 
           const resumeFrom = (existingSession && existingSession.provider === name)
@@ -355,12 +367,12 @@ class ChatService {
             }
 
             if (!text) {
-              text = streamedText || (result.stdout || '').trim();
+              text = streamedText;
             }
 
             if (text && !result.timedOut && result.code === 0) {
               if (!streamedText) options.onChunk?.(text, name);
-              return `${label} [provider: ${name}]: ${text}`;
+              return `${label} [provider: ${name}${name === agent.provider ? '' : ' · explicit backup'}]: ${text}`;
             }
           } else if (name === 'codex') {
             const finalArgs = [...spawnArgs, promptInstructions];
@@ -409,26 +421,19 @@ class ChatService {
             }
 
             if (!answerText) {
-              const codexIdx = lines.findIndex((l) => l.trim() === 'codex');
-              if (codexIdx !== -1) {
-                answerText = lines
-                  .slice(codexIdx + 1)
-                  .filter((l) => !l.startsWith('tokens used') && !/^[\d,]+$/.test(l.trim()) && !l.startsWith('--------'))
-                  .join('\n')
-                  .trim();
-              } else {
-                answerText = (result.stdout || '').trim();
-              }
+              answerText = streamedText;
             }
             if (streamedText && (!answerText || answerText.startsWith('{'))) answerText = streamedText;
 
             if (answerText && !result.timedOut && result.code === 0) {
               if (!streamedText) options.onChunk?.(answerText, name);
-              return `${label} [provider: ${name}]: ${answerText}`;
+              return `${label} [provider: ${name}${name === agent.provider ? '' : ' · explicit backup'}]: ${answerText}`;
             }
           }
 
-          const why = result?.timedOut
+          const why = result?.code === 0 && !streamedText
+            ? 'no readable assistant response'
+            : result?.timedOut
             ? 'timed out'
             : ((result?.stderr || '').split('\n')[0] || `exit ${result?.code}`);
           errors.push(`${name}: ${why}`);

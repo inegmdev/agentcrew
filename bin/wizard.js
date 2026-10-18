@@ -130,7 +130,7 @@ async function runServer(portArg, extraArgs = []) {
   const workspace = new WorkspaceManager({ baseDir: dir });
   const repoPath = process.cwd();
 
-  const project = await workspace.initProject({
+  const project = await workspace.getOrInitProject({
     repoPath,
     name: path.basename(repoPath)
   });
@@ -154,6 +154,10 @@ async function runServer(portArg, extraArgs = []) {
   console.log(`\n=== agentcrew server: ${path.basename(repoPath)} ===`);
   console.log(`  Listening on http://${host}:${port}`);
   console.log(`  Local URL: http://127.0.0.1:${port}`);
+  if (!['127.0.0.1', '::1', 'localhost'].includes(host)) {
+    console.warn('  WARNING: Remote HTTP access is unauthenticated. Anyone who can reach this port can control agent CLIs and run shell commands.');
+    console.warn('  Use only on a network you trust; stop the server when testing is done.');
+  }
   if (host === '0.0.0.0') {
     console.log(`  LAN URL:   http://192.168.100.50:${port}`);
   }

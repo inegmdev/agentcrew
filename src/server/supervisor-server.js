@@ -11,6 +11,7 @@ const { VirtualTeamRoom } = require('../ui/team-room');
 const { IterationRunner } = require('../workflow/iteration-runner');
 const { WebSocketConnection } = require('./websocket');
 const { PtyManager } = require('../session/pty-manager');
+const { AgentTerminal } = require('../session/agent-terminal');
 const { TakeoverController } = require('../session/takeover-controller');
 const { TurnScheduler } = require('../scheduler/turn-scheduler');
 const { ChatService } = require('../chat/chat-service');
@@ -45,6 +46,8 @@ class SupervisorServer {
     this.teamRoom = options.teamRoom || new VirtualTeamRoom();
     this.staticDir = options.staticDir || path.join(__dirname, 'public');
     this.ptyManager = options.ptyManager || new PtyManager({ cwd: this.repoPath });
+    this.which = options.which || which;
+    this.agentTerminalFactory = options.agentTerminalFactory || ((opts) => new AgentTerminal(opts));
     // When true, chat replies come from the real provider CLIs (agy/codex); tests disable this.
     this.liveProviders = options.liveProviders !== false;
 
@@ -55,6 +58,7 @@ class SupervisorServer {
       workspace: this.workspace,
       projectId: this.projectId,
       liveProviders: this.liveProviders,
+      which: this.which,
     });
     this.takeoverController.quiesceAgent = (agentId, opts) => this.chatService.quiesceAgent(agentId, opts);
 
@@ -64,6 +68,7 @@ class SupervisorServer {
     this.sseClients = new Set();
     this.wsClients = new Set();
     this.ptyOwners = new Map();
+    this.agentTerminals = new Map();
     this.humanTurns = new Map();
     this.cursorCounter = 0;
     this.httpServer = null;
@@ -114,10 +119,13 @@ class SupervisorServer {
       const agentId = (await this.chatService.resolveAgent(requestedAgentId)).name;
       const mode = parsedUrl.searchParams.get('mode') || 'chat';
       const takeoverToken = parsedUrl.searchParams.get('token');
-      if (!['chat', 'shell'].includes(mode) || !this.takeoverController.validateToken(agentId, takeoverToken)) {
+      if (!['agent_tui', 'shell'].includes(mode) || !this.takeoverController.validateToken(agentId, takeoverToken)) {
         socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
         socket.destroy();
         return;
+      }
+      if (mode === 'agent_tui') {
+        return this.handleAgentTerminalUpgrade(req, socket, agentId, takeoverToken);
       }
       const ws = WebSocketConnection.accept(req, socket);
       if (!ws) return;
@@ -239,6 +247,73 @@ class SupervisorServer {
     }
   }
 
+  async handleAgentTerminalUpgrade(req, socket, agentId, takeoverToken) {
+    let owner = this.agentTerminals.get(agentId);
+    if (owner?.ws && !owner.ws.isClosed) {
+      socket.write('HTTP/1.1 409 Conflict\r\nConnection: close\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+    if (!owner) {
+      const agent = await this.chatService.resolveAgent(agentId);
+      const reports = await this.chatService.probeProviders();
+      const available = new Map(reports.map((report) => [report.name, report.available]));
+      const candidates = [agent.provider, agent.backupProvider].filter(Boolean);
+      const provider = candidates.find((name) => ['agy', 'codex'].includes(name) && available.get(name) && this.which(name));
+      if (!provider) {
+        socket.write('HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n');
+        socket.destroy();
+        return;
+      }
+      const session = this.workspace && this.projectId
+        ? await this.workspace.getAgentSession(this.projectId, agentId, provider)
+        : await this.chatService.getAgentSession(agentId, provider);
+      const terminal = this.agentTerminalFactory({
+        agent: { ...agent, provider, model: provider === agent.provider ? agent.model : agent.backupModel },
+        session,
+        cwd: this.repoPath,
+        which: this.which,
+      }).start();
+      owner = { agentId, takeoverToken, terminal, ws: null, provider, fallback: provider !== agent.provider, revoking: false };
+      this.agentTerminals.set(agentId, owner);
+      terminal.on('exit', ({ exitCode, signal }) => {
+        if (owner.ws && !owner.ws.isClosed) owner.ws.send(JSON.stringify({ type: 'exit', exitCode, signal }));
+        this.agentTerminals.delete(agentId);
+      });
+    }
+    const ws = WebSocketConnection.accept(req, socket);
+    if (!ws) return;
+    owner.ws = ws;
+    this.wsClients.add(ws);
+    ws.send(JSON.stringify({
+      type: 'ready', mode: 'agent_tui', agentId, provider: owner.provider,
+      fallback: owner.fallback, resumed: Boolean(owner.terminal.session?.sessionId),
+      sessionId: owner.terminal.session?.sessionId || null, cwd: this.repoPath,
+    }));
+    if (owner.terminal.output) ws.send(JSON.stringify({ type: 'output', data: owner.terminal.output }));
+    const onData = (data) => {
+      if (owner.ws === ws) ws.send(JSON.stringify({ type: 'output', data }));
+    };
+    owner.terminal.on('data', onData);
+    ws.on('message', (message) => {
+      try {
+        if (owner.revoking || !this.takeoverController.validateToken(agentId, takeoverToken)) return ws.close();
+        const frame = JSON.parse(String(message));
+        if (frame.type === 'input') owner.terminal.write(frame.data);
+        else if (frame.type === 'resize') owner.terminal.resize(frame.cols, frame.rows);
+      } catch (error) {
+        ws.send(JSON.stringify({ type: 'error', data: error.message }));
+      }
+    });
+    const detach = () => {
+      this.wsClients.delete(ws);
+      owner.terminal.off('data', onData);
+      if (owner.ws === ws) owner.ws = null;
+    };
+    ws.on('close', detach);
+    ws.on('error', detach);
+  }
+
   async stop() {
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
@@ -251,6 +326,9 @@ class SupervisorServer {
       } catch (_) {}
     }
     this.wsClients.clear();
+
+    for (const owner of this.agentTerminals.values()) await owner.terminal.terminateTree();
+    this.agentTerminals.clear();
 
     if (this.ptyManager) {
       this.ptyManager.killAll();
@@ -337,7 +415,8 @@ class SupervisorServer {
       return this.jsonResponse(res, 200, {
         workspace: { id: this.projectId || 'ws-default', name: this.projectName || 'AgentCrew Workspace' },
         agents,
-        active_turn_limit: 4
+        active_turn_limit: 4,
+        public_http_warning: !['127.0.0.1', '::1', 'localhost'].includes(this.host),
       });
     }
 
@@ -372,12 +451,17 @@ class SupervisorServer {
 
     if (pathname === '/api/v1/agents' && method === 'GET') {
       const agents = this.workspace && this.projectId ? await this.workspace.listAgents(this.projectId) : [];
+      const providerReports = await this.chatService.probeProviders();
+      const providerAvailable = new Map(providerReports.map((report) => [report.name, report.available]));
       const stations = this.teamRoom.getStations();
       const enriched = agents.map((agent, idx) => {
         const station = stations[idx] || null;
         const liveState = this.teamRoom.getAgentState(agent.name) || { state: 'idle', activeTaskId: null };
         return {
           ...agent,
+          provider_status: providerAvailable.get(agent.provider) ? 'connected' : 'disconnected',
+          active_provider: providerAvailable.get(agent.provider) ? agent.provider
+            : agent.backup_provider && providerAvailable.get(agent.backup_provider) ? agent.backup_provider : null,
           station: station ? station.grid_position : null,
           state: liveState.state || 'idle',
           active_task_id: liveState.activeTaskId || null,
@@ -470,7 +554,17 @@ class SupervisorServer {
     try {
       let result = null;
 
-      if (command_type === 'session.takeover') {
+      if (command_type === 'agent.provider_config') {
+        if (!this.workspace || !this.projectId) throw Object.assign(new Error('Workspace is unavailable'), { statusCode: 503 });
+        const agentId = (await this.chatService.resolveAgent(payload.agent_id)).name;
+        if (this.agentTerminals.has(agentId)) throw Object.assign(new Error('Release the active terminal before changing provider settings'), { statusCode: 409 });
+        await this.workspace.setAgentProviderConfig(this.projectId, agentId, {
+          backupProvider: payload.backup_provider || null,
+          backupModel: payload.backup_model || null,
+        });
+        result = { agent_id: agentId, backup_provider: payload.backup_provider || null, backup_model: payload.backup_model || null };
+        this.broadcastEvent('agent_provider_configured', result);
+      } else if (command_type === 'session.takeover') {
         const agentId = (await this.chatService.resolveAgent(payload.agent_id)).name;
         const resObj = await this.takeoverController.requestTakeover(agentId);
         this.teamRoom.updateAgentState(agentId, { state: 'takeover' });
@@ -489,6 +583,17 @@ class SupervisorServer {
         }
         if (this.humanTurns.get(agentId)) {
           throw Object.assign(new Error('Human turn is still active; wait for it to finish before release'), { statusCode: 409, code: 'HUMAN_TURN_ACTIVE' });
+        }
+        const agentTerminal = this.agentTerminals.get(agentId);
+        if (agentTerminal) {
+          agentTerminal.revoking = true;
+          const quiescent = await agentTerminal.terminal.terminateTree();
+          if (!quiescent) {
+            agentTerminal.revoking = false;
+            throw Object.assign(new Error('Agent CLI did not confirm exit; takeover remains active'), { statusCode: 409, code: 'AGENT_CLI_QUIESCENCE_UNKNOWN' });
+          }
+          agentTerminal.ws?.close();
+          this.agentTerminals.delete(agentId);
         }
         for (const [sessionId, owner] of this.ptyOwners) {
           if (owner.agentId !== agentId) continue;
@@ -617,6 +722,17 @@ class SupervisorServer {
   }
 
   handleStatic(pathname, res) {
+    const terminalAssets = {
+      '/vendor/xterm.js': require.resolve('@xterm/xterm'),
+      '/vendor/xterm.css': path.join(path.dirname(require.resolve('@xterm/xterm')), '../css/xterm.css'),
+      '/vendor/addon-fit.js': require.resolve('@xterm/addon-fit'),
+    };
+    if (terminalAssets[pathname]) {
+      const asset = terminalAssets[pathname];
+      res.writeHead(200, { 'Content-Type': MIME_TYPES[path.extname(asset)] || 'application/octet-stream' });
+      fs.createReadStream(asset).pipe(res);
+      return;
+    }
     let filePath = pathname === '/' ? '/index.html' : pathname;
     const safePath = path.normalize(filePath).replace(/^(\.\.[\/\\])+/, '');
     const fullPath = path.join(this.staticDir, safePath);

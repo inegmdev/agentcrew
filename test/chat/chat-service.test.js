@@ -65,11 +65,11 @@ test('ChatService uses adapter buildSpawnArgs when invoking provider', async () 
     activeSessions: new Map(),
     async execute(cmd, opts) {
       executedCommands.push({ cmd, opts });
-      return { stdout: 'I am Alice', stderr: '', code: 0 };
+      return { stdout: '{"response":"I am Alice"}', stderr: '', code: 0 };
     },
     async executeCommand(binary, args, opts) {
       executedCommands.push({ binary, args, opts });
-      return { stdout: 'I am Alice', stderr: '', code: 0 };
+      return { stdout: '{"response":"I am Alice"}', stderr: '', code: 0 };
     }
   };
 
@@ -135,14 +135,16 @@ test('ChatService fails over to next available provider if primary fails', async
     liveProviders: true,
     adapters: { agy: mockAgy, codex: mockCodex },
     ptyManager: mockPty,
-    which: () => true
+    which: () => true,
+    workspace: { async listAgents() { return [{ name: 'Alice', role: 'Business Analyst', provider: 'agy', model: 'gemini-2.5-pro', backup_provider: 'codex', backup_model: 'o3' }]; } },
+    projectId: 'test',
   });
 
   const reply = await service.generateResponse('Alice', 'Hello Alice');
   assert.ok(callLog.includes('agy'), 'Must attempt agy first');
   assert.ok(callLog.includes('codex'), 'Must failover to codex');
   assert.ok(reply.includes('Codex answers'), `Reply must contain failover text: ${reply}`);
-  assert.ok(reply.includes('[provider: codex]'), `Reply must identify the responding provider: ${reply}`);
+  assert.ok(reply.includes('[provider: codex · explicit backup]'), `Reply must identify the responding provider: ${reply}`);
   assert.equal((await service.probeProviders()).find((p) => p.name === 'agy').status, 'quota_limited');
 });
 
@@ -181,14 +183,14 @@ test('ChatService records quota reset hints from provider errors', async () => {
   assert.ok(Date.parse(agy.reset_at) > Date.now());
 });
 
-test('ChatService labels fallback for agents assigned an unqualified Gemini provider', async () => {
+test('ChatService does not silently route a Gemini agent to agy', async () => {
   let invoked = false;
   const gemini = { command: 'gemini', buildSpawnArgs: () => { invoked = true; return []; } };
   const agy = new AgyAdapter();
   const service = new ChatService({
     liveProviders: true,
     adapters: { gemini, agy },
-    which: (bin) => bin === 'gemini' || bin === 'agy',
+    which: (bin) => bin === 'agy',
     ptyManager: {
       async execute() { return { stdout: '', code: 0 }; },
       async executeCommand(binary, args) {
@@ -197,9 +199,50 @@ test('ChatService labels fallback for agents assigned an unqualified Gemini prov
       },
     },
   });
-  const response = await service.generateResponse('QA-1', 'Review this change');
+  await assert.rejects(service.generateResponse('QA-1', 'Review this change', {
+    throwOnProviderError: true,
+  }), /gemini.*unavailable|unavailable.*gemini/i);
   assert.equal(invoked, false);
-  assert.match(response, /\[provider: agy\].*Fallback response/);
+});
+
+test('ChatService never displays provider metadata as an assistant answer', async () => {
+  const chunks = [];
+  const service = new ChatService({
+    liveProviders: true,
+    which: (bin) => bin === 'agy',
+    ptyManager: {
+      async executeCommand(_binary, _args, options) {
+        const stdout = '{"event":"init","conversation_id":"conv-1"}\n{"event":"step_update","step_update":{"status":"thinking"}}\n';
+        options.onStdout(stdout);
+        return { stdout, stderr: '', code: 0 };
+      },
+    },
+  });
+  await assert.rejects(service.generateResponse('Alice', 'Hello', {
+    throwOnProviderError: true,
+    onChunk: (chunk) => chunks.push(chunk),
+  }), /no readable assistant response/i);
+  assert.deepEqual(chunks, []);
+});
+
+test('ChatService does not call plain Codex stdout an assistant reply', async () => {
+  const chunks = [];
+  const service = new ChatService({
+    liveProviders: true,
+    which: (bin) => bin === 'codex',
+    ptyManager: {
+      async executeCommand(_binary, _args, options) {
+        const stdout = '{"type":"thread.started","thread_id":"thread-1"}\nCodex initialized\n';
+        options.onStdout(stdout);
+        return { stdout, stderr: '', code: 0 };
+      },
+    },
+  });
+  await assert.rejects(service.generateResponse('Arthur', 'Hello', {
+    throwOnProviderError: true,
+    onChunk: (chunk) => chunks.push(chunk),
+  }), /no readable assistant response/i);
+  assert.deepEqual(chunks, []);
 });
 
 test('ChatService includes review context in provider prompt and throws when all providers fail', async () => {

@@ -92,42 +92,55 @@ test('SupervisorServer chatService generates persona responses for all agent rol
   assert.ok(qaRes.includes('QA-1') || qaRes.includes('test') || qaRes.includes('verification') || qaRes.includes('Tester'), `Expected QA in ${qaRes}`);
 });
 
-test('PTY chat streams chunks and clears room thinking state after provider timeout', async () => {
-  const server = new SupervisorServer({ liveProviders: false });
-  const frames = [];
-  const broadcasts = [];
-  const ws = new EventEmitter();
-  ws.isClosed = false;
-  ws.send = (frame) => frames.push(JSON.parse(frame));
+test('agent CLI PTY accepts input/resize, reattaches after refresh, and exits before release', async () => {
+  const writes = [];
+  const sizes = [];
+  let terminated = false;
+  let spawned = 0;
+  const terminal = new EventEmitter();
+  terminal.session = { sessionId: 'native-42' };
+  terminal.output = 'previous output';
+  terminal.start = () => { spawned++; return terminal; };
+  terminal.write = (data) => writes.push(data);
+  terminal.resize = (cols, rows) => sizes.push([cols, rows]);
+  terminal.terminateTree = async () => { terminated = true; return true; };
+  const server = new SupervisorServer({
+    liveProviders: false,
+    which: (name) => name === 'codex',
+    agentTerminalFactory: () => terminal,
+  });
+  server.chatService.resolveAgent = async () => ({ name: 'Dev-1', provider: 'codex', model: 'o3' });
+  server.chatService.getAgentSession = async () => ({ sessionId: 'native-42', provider: 'codex' });
   server.takeoverController.sessions.set('Dev-1', { state: 'human_owned', token: 'test-token' });
-  server.broadcastEvent = (name, data) => broadcasts.push({ name, data });
-  server.chatService = {
-    async resolveAgent(agentId) { return { name: agentId }; },
-    async generateResponse(_agent, _prompt, { onChunk }) {
-      onChunk('partial ');
-      onChunk('reply');
-      throw new Error('codex: timed out');
-    }
-  };
-
+  const sockets = [];
   const accept = WebSocketConnection.accept;
-  WebSocketConnection.accept = () => ws;
+  WebSocketConnection.accept = () => {
+    const ws = new EventEmitter();
+    ws.isClosed = false;
+    ws.frames = [];
+    ws.send = (frame) => ws.frames.push(JSON.parse(frame));
+    ws.close = () => { ws.isClosed = true; ws.emit('close'); };
+    sockets.push(ws);
+    return ws;
+  };
   try {
-    await server.handleUpgrade({ url: '/api/v1/pty?mode=chat&agent_id=Dev-1&token=test-token', headers: { host: 'localhost' } }, {}, Buffer.alloc(0));
-    ws.emit('message', JSON.stringify({ type: 'input', data: 'Please respond\n' }));
-    for (let i = 0; i < 20 && !frames.some((frame) => frame.type === 'chat_failed'); i++) {
-      await new Promise((resolve) => setImmediate(resolve));
-    }
-
-    assert.deepEqual(frames.map((frame) => frame.type), [
-      'ready', 'chat_started', 'chat_chunk', 'chat_chunk', 'chat_failed'
-    ]);
-    assert.equal(frames[2].text, 'partial ');
-    assert.equal(frames[3].text, 'reply');
-    assert.match(frames[4].error, /timed out/);
-    assert.equal(server.teamRoom.getAgentState('Dev-1').state, 'takeover');
-    assert.deepEqual(broadcasts.map((event) => event.name), ['agent_thinking', 'agent_thinking_ended']);
-    assert.equal(broadcasts[1].data.outcome, 'failed');
+    const request = { url: '/api/v1/pty?mode=agent_tui&agent_id=Dev-1&token=test-token', headers: { host: 'localhost' } };
+    await server.handleUpgrade(request, {}, Buffer.alloc(0));
+    assert.equal(sockets[0].frames[0].resumed, true);
+    assert.equal(sockets[0].frames[1].data, 'previous output');
+    sockets[0].emit('message', JSON.stringify({ type: 'input', data: 'hello\r' }));
+    sockets[0].emit('message', JSON.stringify({ type: 'resize', cols: 90, rows: 25 }));
+    terminal.emit('data', '\x1b[31mCLI output');
+    assert.deepEqual(writes, ['hello\r']);
+    assert.deepEqual(sizes, [[90, 25]]);
+    assert.equal(sockets[0].frames.at(-1).data, '\x1b[31mCLI output');
+    sockets[0].close();
+    await server.handleUpgrade(request, {}, Buffer.alloc(0));
+    assert.equal(spawned, 1, 'refresh must reconnect to the same running PTY');
+    const response = { writeHead() {}, end(body) { this.body = JSON.parse(body); } };
+    await server.handleCommand({ action: 'release', agent_id: 'Dev-1', takeover_token: 'test-token' }, response);
+    assert.equal(response.body.status, 'acknowledged');
+    assert.equal(terminated, true);
   } finally {
     WebSocketConnection.accept = accept;
   }

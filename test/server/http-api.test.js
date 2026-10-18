@@ -119,6 +119,22 @@ test('SupervisorServer serves TRD §12 API routes and SSE stream', async (t) => 
     const dev1 = data.agents.find(a => a.name === 'Dev-1');
     assert.ok(dev1);
     assert.equal(dev1.role, 'Developer');
+    const qa1 = data.agents.find(a => a.name === 'QA-1');
+    assert.equal(qa1.provider_status, 'disconnected');
+    assert.equal(qa1.active_provider, null);
+  });
+
+  await t.test('provider backup is opt-in and saved on the selected agent', async () => {
+    const response = await fetch(`${baseUrl}/api/v1/commands`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command_type: 'agent.provider_config', payload: {
+        agent_id: 'QA-1', backup_provider: 'codex', backup_model: 'o3',
+      } }),
+    });
+    assert.equal(response.status, 200);
+    const qa1 = (await (await fetch(`${baseUrl}/api/v1/agents`)).json()).agents.find(a => a.name === 'QA-1');
+    assert.equal(qa1.backup_provider, 'codex');
+    assert.equal(qa1.backup_model, 'o3');
   });
 
   await t.test('POST /api/v1/commands executes takeover and release cycle', async () => {

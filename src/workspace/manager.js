@@ -24,6 +24,30 @@ class WorkspaceManager {
     this.baseDir = opts.baseDir || path.join(process.env.HOME || '', '.agentcrew');
   }
 
+  async getOrInitProject({ repoPath, name } = {}) {
+    const normalized = fs.realpathSync(repoPath);
+    const projectsDir = path.join(this.baseDir, 'projects');
+    if (fs.existsSync(projectsDir)) {
+      for (const entry of fs.readdirSync(projectsDir, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
+        const dbPath = path.join(projectsDir, entry.name, 'agentcrew.db');
+        if (!fs.existsSync(dbPath)) continue;
+        const db = new DatabaseSync(dbPath);
+        try {
+          const row = db.prepare('SELECT id, repo_path FROM projects LIMIT 1').get();
+          if (row && fs.existsSync(row.repo_path) && fs.realpathSync(row.repo_path) === normalized) {
+            return { id: row.id, dbPath, projectDir: path.dirname(dbPath) };
+          }
+        } catch (_) {
+          // An unrelated or old database is not this workspace.
+        } finally {
+          db.close();
+        }
+      }
+    }
+    return this.initProject({ repoPath: normalized, name });
+  }
+
   async initProject({ repoPath, name } = {}) {
     const projectId = crypto.randomUUID();
     const projectDir = path.join(this.baseDir, 'projects', projectId);
@@ -99,10 +123,50 @@ class WorkspaceManager {
   async listAgents(projectId) {
     const dbPath = path.join(this.baseDir, 'projects', projectId, 'agentcrew.db');
     const db = new DatabaseSync(dbPath);
+    this.ensureAgentConfig(db);
     const query = db.prepare('SELECT * FROM agents WHERE project_id = ? ORDER BY rowid ASC');
     const rows = query.all(projectId);
     db.close();
     return rows;
+  }
+
+  ensureAgentConfig(db) {
+    const columns = db.prepare('PRAGMA table_info(agents)').all().map((row) => row.name);
+    if (!columns.includes('backup_provider')) db.exec('ALTER TABLE agents ADD COLUMN backup_provider TEXT');
+    if (!columns.includes('backup_model')) db.exec('ALTER TABLE agents ADD COLUMN backup_model TEXT');
+  }
+
+  async setAgentProviderConfig(projectId, agentId, { backupProvider = null, backupModel = null } = {}) {
+    if (backupProvider !== null && !['agy', 'codex', 'gemini'].includes(backupProvider)) {
+      throw new Error('Unsupported backup provider');
+    }
+    if (backupModel !== null && (typeof backupModel !== 'string' || backupModel.length > 120)) {
+      throw new Error('Invalid backup model');
+    }
+    const dbPath = path.join(this.baseDir, 'projects', projectId, 'agentcrew.db');
+    const db = new DatabaseSync(dbPath);
+    try {
+      this.ensureAgentConfig(db);
+      const row = db.prepare('SELECT provider FROM agents WHERE project_id = ? AND (id = ? OR name = ?)').get(projectId, agentId, agentId);
+      if (!row) throw new Error('Agent not found');
+      if (backupProvider === row.provider) throw new Error('Backup provider must differ from primary');
+      db.prepare('UPDATE agents SET backup_provider = ?, backup_model = ? WHERE project_id = ? AND (id = ? OR name = ?)')
+        .run(backupProvider, backupProvider ? backupModel : null, projectId, agentId, agentId);
+    } finally {
+      db.close();
+    }
+  }
+
+  ensureProviderConversations(db) {
+    db.exec(`CREATE TABLE IF NOT EXISTS provider_conversations (
+      project_id TEXT NOT NULL, agent_id TEXT NOT NULL, provider TEXT NOT NULL,
+      session_id TEXT NOT NULL, updated_at TEXT NOT NULL,
+      PRIMARY KEY (project_id, agent_id, provider)
+    )`);
+    // Preserve the old single-provider row on first access; never overwrite a newer conversation.
+    const legacy = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'provider_sessions'").get();
+    if (legacy) db.exec(`INSERT OR IGNORE INTO provider_conversations
+      SELECT project_id, agent_id, provider, session_id, updated_at FROM provider_sessions`);
   }
 
   async checkReadiness(projectId) {
@@ -116,22 +180,15 @@ class WorkspaceManager {
     };
   }
 
-  async getAgentSession(projectId, agentId) {
+  async getAgentSession(projectId, agentId, provider = null) {
     const dbPath = path.join(this.baseDir, 'projects', projectId, 'agentcrew.db');
     if (!fs.existsSync(dbPath)) return null;
     const db = new DatabaseSync(dbPath);
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS provider_sessions (
-        project_id TEXT NOT NULL,
-        agent_id TEXT NOT NULL,
-        provider TEXT NOT NULL,
-        session_id TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        PRIMARY KEY (project_id, agent_id)
-      );
-    `);
-    const stmt = db.prepare('SELECT session_id, provider FROM provider_sessions WHERE project_id = ? AND agent_id = ?');
-    const row = stmt.get(projectId, agentId);
+    this.ensureProviderConversations(db);
+    const stmt = provider
+      ? db.prepare('SELECT session_id, provider FROM provider_conversations WHERE project_id = ? AND agent_id = ? AND provider = ?')
+      : db.prepare('SELECT session_id, provider FROM provider_conversations WHERE project_id = ? AND agent_id = ? ORDER BY updated_at DESC LIMIT 1');
+    const row = provider ? stmt.get(projectId, agentId, provider) : stmt.get(projectId, agentId);
     db.close();
     return row ? { sessionId: row.session_id, provider: row.provider } : null;
   }
@@ -140,21 +197,11 @@ class WorkspaceManager {
     const dbPath = path.join(this.baseDir, 'projects', projectId, 'agentcrew.db');
     if (!fs.existsSync(dbPath)) return;
     const db = new DatabaseSync(dbPath);
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS provider_sessions (
-        project_id TEXT NOT NULL,
-        agent_id TEXT NOT NULL,
-        provider TEXT NOT NULL,
-        session_id TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        PRIMARY KEY (project_id, agent_id)
-      );
-    `);
+    this.ensureProviderConversations(db);
     const stmt = db.prepare(`
-      INSERT INTO provider_sessions (project_id, agent_id, provider, session_id, updated_at)
+      INSERT INTO provider_conversations (project_id, agent_id, provider, session_id, updated_at)
       VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(project_id, agent_id) DO UPDATE SET
-        provider = excluded.provider,
+      ON CONFLICT(project_id, agent_id, provider) DO UPDATE SET
         session_id = excluded.session_id,
         updated_at = excluded.updated_at
     `);

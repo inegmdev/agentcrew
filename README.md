@@ -118,7 +118,7 @@ agentcrew server 3000
 Open **`http://127.0.0.1:3000`** in your browser to interact with:
 - **Virtual Team Room**: 4x4 isometric layout of 13 agent identities with real-time activity badges.
 - **Kanban Flow**: Live task lifecycle board tracking requirements through planning, development, architect review, and independent QA.
-- **Takeover Console**: Intervene in running agent sessions, inspect and authorize tools, and release back to autonomous scheduling with guidance notes.
+- **Takeover Console**: Control the assigned provider's interactive CLI in a real browser terminal (or use the separate Shell channel), then release back to autonomous scheduling.
 - **Observability Dashboard**: Cycle times, QA pass rates, and provider qualification readiness.
 - **Real-Time SSE Stream**: Automatic updates pushed over Server-Sent Events (`/api/v1/events`).
 
@@ -132,6 +132,21 @@ npm run server -- --host 0.0.0.0
 # or
 agentcrew server 3000 --host 0.0.0.0
 ```
+
+**Warning:** binding to `0.0.0.0` exposes an unauthenticated command-capable
+dashboard over plain HTTP. Anyone who can reach the port can control the CLI
+and run commands as your user. This is suitable only for a short-lived test on
+a network whose access you control; it is not an internet-safe deployment.
+Binding to a Tailscale address limits reachability to that tailnet, but does not
+add application authentication. Stop the server when done.
+
+Agents use their configured CLI strictly. Missing/unqualified Gemini leaves
+Gemini-assigned agents disconnected by default. You can save one explicit backup
+CLI and model in the selected agent panel; fallback is labeled and uses its own
+native conversation (no cross-provider context transfer). The browser terminal
+resumes a saved native conversation in a new process. A new CLI conversation has
+no saved resume ID until a provider session ID is captured; the UI marks it new.
+Same-tab refresh reattaches to the running PTY. Releasing control stops the CLI.
 
 Use this computer's LAN address (for example,
 `http://192.168.100.50:3000`) from the other device. Allow TCP port 3000 in the

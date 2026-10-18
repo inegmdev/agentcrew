@@ -315,3 +315,14 @@ socket close. Provider output is line-normalized; exact delta event shapes remai
 provider-dependent. The frame contract and UI behavior are recorded in PRD/TRD.
 Cross-task review hardened same-origin/JSON command handling, prevented release
 while a human chat turn remains active, and fixed a WebSocket mode-switch race.
+
+Follow-up after mobile testing: QA-1/QA-2 remained Gemini-assigned despite no
+qualified Gemini CLI, because ChatService silently fell back to agy; metadata-only
+agy JSON was also displayed as chat. Replaced implicit routing with strict primary
+and persisted opt-in per-agent backup provider/model. Native conversations are now
+stored per provider. The browser takeover surface defaults to an interactive
+node-pty/xterm CLI terminal with keystrokes, resize, mobile keys, and same-tab PTY
+reattachment; Shell remains separate. Existing native IDs resume in a new process;
+fresh TUI conversations are marked new and not claimed as resumable. Server startup
+reuses the workspace database to preserve settings. Non-loopback HTTP remains an
+explicit, unauthenticated short-lived test mode with a prominent warning.

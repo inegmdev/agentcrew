@@ -41,5 +41,9 @@
     "server": "node bin/wizard.js server",
     "test": "node --test \"test/**/*.test.js\""
   },
-  "dependencies": {}
+  "dependencies": {
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "node-pty": "^1.1.0"
+  }
 }

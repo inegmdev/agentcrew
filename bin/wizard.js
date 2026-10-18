@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const { checkPrerequisites } = require('../src/steps/checkPrerequisites');
 const { detectAgents } = require('../src/steps/detectAgents');
 const { installBacklog } = require('../src/steps/installBacklog');
@@ -159,7 +160,13 @@ async function runServer(portArg, extraArgs = []) {
     console.warn('  Use only on a network you trust; stop the server when testing is done.');
   }
   if (host === '0.0.0.0') {
-    console.log(`  LAN URL:   http://192.168.100.50:${port}`);
+    for (const [name, addresses] of Object.entries(os.networkInterfaces())) {
+      for (const address of addresses || []) {
+        if (address.family === 'IPv4' && !address.internal) {
+          console.log(`  ${name}: http://${address.address}:${port}`);
+        }
+      }
+    }
   }
   console.log(`  Open in your browser to view the AI Team Workspace.`);
   console.log('  Press Ctrl-C to stop.\n');

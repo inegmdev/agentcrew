@@ -103,8 +103,27 @@ test('SupervisorServer serves TRD §12 API routes and SSE stream', async (t) => 
     assert.equal(takeoverRes.status, 200);
     const takeoverData = await takeoverRes.json();
     assert.equal(takeoverData.status, 'acknowledged');
-    assert.equal(takeoverData.result.agent_id, 'dev-1');
+    assert.equal(takeoverData.result.agent_id, 'Dev-1');
     assert.equal(takeoverData.result.state, 'human_owned');
+    const token = takeoverData.result.takeover_token;
+
+    const conflictRes = await fetch(`${baseUrl}/api/v1/commands`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command_type: 'session.takeover', payload: { agent_id: 'dev-1' } })
+    });
+    assert.equal(conflictRes.status, 409, 'a second tab cannot take the same agent');
+
+    const invalidChatRes = await fetch(`${baseUrl}/api/v1/commands`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command_type: 'session.exec', payload: { agent_id: 'dev-1', command: 'hello', mode: 'chat', takeover_token: 'wrong' } })
+    });
+    assert.equal(invalidChatRes.status, 403);
+
+    const validChatRes = await fetch(`${baseUrl}/api/v1/commands`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command_type: 'session.exec', payload: { agent_id: 'dev-1', command: 'hello', mode: 'chat', takeover_token: token } })
+    });
+    assert.equal(validChatRes.status, 200, 'human chat is allowed during an agent hold');
 
     // 2. Release Takeover
     const releaseRes = await fetch(`${baseUrl}/api/v1/commands`, {
@@ -112,7 +131,7 @@ test('SupervisorServer serves TRD §12 API routes and SSE stream', async (t) => 
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         command_type: 'session.release',
-        payload: { agent_id: 'dev-1', guidance_notes: 'Fixed typo in test assertion' },
+        payload: { agent_id: 'dev-1', takeover_token: token, guidance_notes: 'Fixed typo in test assertion' },
         idempotency_key: 'cmd-release-1'
       })
     });

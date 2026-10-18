@@ -28,6 +28,7 @@ class PtyManager extends EventEmitter {
 
     const child = spawn(this.shell, args, {
       cwd: cwd || this.cwd,
+      detached: process.platform !== 'win32',
       env: shellEnv,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
@@ -49,9 +50,35 @@ class PtyManager extends EventEmitter {
             if (child.stdin) child.stdin.end();
             if (child.stdout) child.stdout.destroy();
             if (child.stderr) child.stderr.destroy();
-            child.kill('SIGKILL');
+            if (process.platform !== 'win32' && child.pid) process.kill(-child.pid, 'SIGKILL');
+            else child.kill('SIGKILL');
           } catch (_) {}
         }
+      },
+      async terminateTree() {
+        if (session.isAlive) {
+          try {
+            if (process.platform !== 'win32' && child.pid) process.kill(-child.pid, 'SIGTERM');
+            else child.kill('SIGTERM');
+          } catch (error) { if (error.code !== 'ESRCH') return false; }
+          await new Promise((resolve) => {
+            if (!session.isAlive) return resolve();
+            const timer = setTimeout(resolve, 5000);
+            child.once('close', () => { clearTimeout(timer); resolve(); });
+          });
+        }
+        if (process.platform === 'win32' || !child.pid) return false;
+        try {
+          process.kill(-child.pid, 'SIGKILL');
+        } catch (error) {
+          if (error.code === 'ESRCH') return true;
+        }
+        const deadline = Date.now() + 5000;
+        while (Date.now() < deadline) {
+          try { process.kill(-child.pid, 0); } catch (error) { if (error.code === 'ESRCH') return true; }
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        return false;
       },
     };
 
@@ -131,10 +158,12 @@ class PtyManager extends EventEmitter {
     });
   }
 
-  async executeCommand(binary, args = [], { timeoutMs = 45000, cwd, stdinInput } = {}) {
+  async executeCommand(binary, args = [], { timeoutMs = 45000, cwd, stdinInput, signal } = {}) {
     return new Promise((resolve, reject) => {
+      if (signal?.aborted) return resolve({ stdout: '', stderr: 'Cancelled before spawn', code: -1, interrupted: true, quiescent: true });
       const child = spawn(binary, args, {
         cwd: cwd || this.cwd,
+        detached: process.platform !== 'win32',
         env: {
           ...process.env,
           TERM: 'xterm-256color',
@@ -154,28 +183,61 @@ class PtyManager extends EventEmitter {
       child.stderr.on('data', (c) => { stderr += c.toString('utf8'); });
 
       let finished = false;
+      let interrupted = false;
+      let interruptionAt = null;
+      let escalationTimer = null;
+      const signalTree = (name) => {
+        try {
+          if (process.platform !== 'win32' && child.pid) process.kill(-child.pid, name);
+          else child.kill(name);
+        } catch (error) {
+          if (error.code !== 'ESRCH') throw error;
+        }
+      };
+      const onAbort = () => {
+        interrupted = true;
+        interruptionAt = Date.now();
+        signalTree('SIGTERM');
+        escalationTimer = setTimeout(() => signalTree('SIGKILL'), 5000);
+      };
+      signal?.addEventListener('abort', onAbort, { once: true });
       const timer = setTimeout(() => {
         if (!finished) {
-          finished = true;
-          try { child.kill('SIGKILL'); } catch (_) {}
-          resolve({
-            stdout: stdout.trim(),
-            stderr: stderr.trim() || 'Command timed out',
-            code: -1,
-            timedOut: true
-          });
+          interrupted = true;
+          interruptionAt = Date.now();
+          signalTree('SIGTERM');
+          escalationTimer = setTimeout(() => signalTree('SIGKILL'), 5000);
         }
       }, timeoutMs);
 
-      child.on('close', (code) => {
+      child.on('close', async (code) => {
         if (!finished) {
           finished = true;
           clearTimeout(timer);
+          clearTimeout(escalationTimer);
+          signal?.removeEventListener('abort', onAbort);
+          let quiescent = !interrupted;
+          if (interrupted && process.platform !== 'win32' && child.pid) {
+            const deadline = interruptionAt + 10000;
+            let escalated = false;
+            while (Date.now() < deadline) {
+              let groupExists = true;
+              try { process.kill(-child.pid, 0); } catch (error) { if (error.code === 'ESRCH') groupExists = false; }
+              if (!groupExists) { quiescent = true; break; }
+              if (!escalated && Date.now() >= interruptionAt + 5000) {
+                signalTree('SIGKILL');
+                escalated = true;
+              }
+              await new Promise((resolveWait) => setTimeout(resolveWait, 50));
+            }
+          }
           resolve({
             stdout: stdout.trim(),
             stderr: stderr.trim(),
             code,
-            timedOut: false
+            timedOut: !signal?.aborted && interrupted,
+            interrupted,
+            quiescent
           });
         }
       });
@@ -184,6 +246,8 @@ class PtyManager extends EventEmitter {
         if (!finished) {
           finished = true;
           clearTimeout(timer);
+          clearTimeout(escalationTimer);
+          signal?.removeEventListener('abort', onAbort);
           reject(err);
         }
       });

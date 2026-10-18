@@ -16,6 +16,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnTakeover = document.getElementById('btn-takeover');
   const btnRelease = document.getElementById('btn-release');
   const agentSelect = document.getElementById('takeover-agent-select');
+  const takeoverTokens = new Map();
   const stateBadge = document.getElementById('takeover-state-badge');
   const agentSearchInput = document.getElementById('agent-search');
   const agentRosterCount = document.getElementById('agent-roster-count');
@@ -1027,14 +1028,19 @@ document.addEventListener('DOMContentLoaded', () => {
           body: JSON.stringify({ action: 'takeover', agent_id: agentId })
         });
         const result = await res.json();
-        const token = (result.result && result.result.takeover_token) || (result.session && result.session.takeover_token) || 'tok-live';
-        log(`Takeover confirmed: ${agentId} is now HUMAN_OWNED (token: ${token.slice(0, 8)}...)`, 'success');
+        if (!res.ok || result.status !== 'acknowledged' || !result.result?.takeover_token) {
+          throw new Error(result.error || 'Takeover was not acquired');
+        }
+        const token = result.result.takeover_token;
+        takeoverTokens.set(agentId, token);
+        log(`Takeover confirmed: ${agentId} is now HUMAN_OWNED`, 'success');
         stateBadge.textContent = 'Human Owned';
         btnRelease.disabled = false;
         if (cmdInput) cmdInput.disabled = false;
         if (btnSendCmd) btnSendCmd.disabled = false;
         if (cmdInput) cmdInput.focus();
-        connectPty(agentId);
+        if (inputMode) inputMode.disabled = false;
+        if (inputMode?.value === 'shell') connectPty(agentId);
         if (pixelRenderer) {
           pixelRenderer.showSpeechBubble(agentId, 'Operator Live Takeover', 8000);
         }
@@ -1054,9 +1060,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const res = await fetch('/api/v1/commands', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'release', agent_id: agentId, guidance: 'Takeover completed successfully.' })
+          body: JSON.stringify({ action: 'release', agent_id: agentId, takeover_token: takeoverTokens.get(agentId), guidance: 'Takeover completed successfully.' })
         });
-        await res.json();
+        const released = await res.json();
+        if (!res.ok) throw new Error(released.error || 'Release failed');
+        takeoverTokens.delete(agentId);
         log(`Takeover released: ${agentId} returned to AUTO`, 'success');
         stateBadge.textContent = 'Auto';
         btnTakeover.disabled = false;
@@ -1066,6 +1074,7 @@ document.addEventListener('DOMContentLoaded', () => {
           cmdInput.value = '';
         }
         if (btnSendCmd) btnSendCmd.disabled = true;
+        if (inputMode) inputMode.disabled = true;
         loadAgents();
       } catch (err) {
         log(`Release failed: ${err.message}`, 'action');
@@ -1078,6 +1087,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let ptySocket = null;
   const cmdInput = document.getElementById('takeover-command-input');
   const btnSendCmd = document.getElementById('btn-send-command');
+  const inputMode = document.getElementById('agent-input-mode');
 
   function connectPty(agentId) {
     if (ptySocket) {
@@ -1086,7 +1096,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${proto}//${window.location.host}/api/v1/pty?agent_id=${encodeURIComponent(agentId)}`;
+    const token = takeoverTokens.get(agentId);
+    if (!token) { log('[PTY] Takeover token missing; shell remains disconnected', 'action'); return; }
+    const wsUrl = `${proto}//${window.location.host}/api/v1/pty?mode=shell&agent_id=${encodeURIComponent(agentId)}&token=${encodeURIComponent(token)}`;
 
     try {
       ptySocket = new WebSocket(wsUrl);
@@ -1140,15 +1152,26 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  inputMode?.addEventListener('change', () => {
+    disconnectPty();
+    if (inputMode.value === 'shell' && !btnRelease.disabled) {
+      const agentId = selectedAgentName || agentSelect?.value || 'Dev-1';
+      connectPty(agentId);
+      if (cmdInput) cmdInput.placeholder = 'Enter a shell command…';
+    } else if (cmdInput) {
+      cmdInput.placeholder = 'Message the agent…';
+    }
+  });
+
   async function executeOperatorCommand() {
     if (!cmdInput || !cmdInput.value.trim()) return;
     const commandText = cmdInput.value.trim();
-    const agentId = agentSelect ? agentSelect.value : 'Dev-1';
+    const agentId = selectedAgentName || agentSelect?.value || 'Dev-1';
 
     log(`[Operator > ${agentId}]$ ${commandText}`, 'action');
     cmdInput.value = '';
 
-    if (ptySocket && ptySocket.readyState === WebSocket.OPEN) {
+    if (inputMode?.value === 'shell' && ptySocket && ptySocket.readyState === WebSocket.OPEN) {
       ptySocket.send(JSON.stringify({ type: 'input', data: `${commandText}\n` }));
     } else {
       // Fallback to HTTP command dispatch
@@ -1158,10 +1181,11 @@ document.addEventListener('DOMContentLoaded', () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             command_type: 'session.exec',
-            payload: { agent_id: agentId, command: commandText }
+            payload: { agent_id: agentId, command: commandText, mode: inputMode?.value || 'chat', takeover_token: takeoverTokens.get(agentId) }
           })
         });
         const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Command rejected');
         if (data.result && data.result.output) {
           log(data.result.output, 'success');
         }

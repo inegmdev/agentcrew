@@ -485,6 +485,14 @@ by runtime escalation when needed. Hard-stop grace is five seconds before forced
 termination of the owned tree. Aborting a process may require a new session/handoff;
 the UI must not pretend it resumed the identical native conversation.
 
+Takeover ownership and scheduler holds are keyed by canonical agent identity. A
+successful acquisition returns an opaque token scoped to that agent; human chat,
+release, and shell WebSocket upgrades must present it. Reject duplicate acquisition
+with a conflict. Authorize a shell upgrade before accepting the WebSocket or spawning
+its PTY. Scheduler holds suppress autonomous queued input while allowing human chat
+through the same per-agent serial queue. If the provider process tree does not
+confirm quiescence within the soft budget, retain `blocked` and issue no token.
+
 While `human_owned`, suppress autonomous dispatch and watchdog nudges. Permit only
 human-sourced input and resulting authorized tools. Blanket denial of every tool
 while human-owned would defeat the product and is explicitly replaced by source-aware

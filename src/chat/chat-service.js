@@ -64,6 +64,7 @@ class ChatService {
       ? opts.liveProviders
       : Boolean(process.env.AGENTCREW_LIVE_PROVIDERS);
     this.sessionCache = new Map();
+    this.activeTurns = new Map();
 
     this.adapters = {
       agy: opts.adapters?.agy || new AgyAdapter(),
@@ -165,7 +166,14 @@ class ChatService {
 
     // Concurrency ceiling: chat turns are enqueued on the TurnScheduler (maxConcurrency: 4)
     const turnId = `chat-${agent.name}-${Date.now()}`;
-    return this.scheduler.enqueue(turnId, async () => {
+    const turnControl = new AbortController();
+    const activeKey = agent.name;
+    const turnPromise = this.scheduler.enqueue(turnId, async () => {
+      this.activeTurns.set(activeKey, { controller: turnControl, done: null });
+      const active = this.activeTurns.get(activeKey);
+      active.quiescent = true;
+      active.done = new Promise((resolve) => { active.resolveDone = resolve; });
+      try {
       let gitInfo = '';
       try {
         const gitCheck = await this.ptyManager.execute('git log -n 1 --oneline', { cwd: this.repoPath });
@@ -195,6 +203,7 @@ class ChatService {
       const errors = [];
 
       for (const name of order) {
+        if (turnControl.signal.aborted) return `${label}: turn interrupted for takeover`;
         const adapter = this.adapters[name];
         try {
           // Model selection: only apply model if calling assigned provider, and avoid obsolete/unsupported placeholders
@@ -228,7 +237,10 @@ class ChatService {
               result = await this.ptyManager.executeCommand(adapter.command || 'agy', finalArgs, {
                 cwd: this.repoPath,
                 timeoutMs: 45000,
+                signal: turnControl.signal,
               });
+            if (result.quiescent === false) active.quiescent = false;
+            if (turnControl.signal.aborted) return `${label}: turn interrupted for takeover`;
             } else {
               result = await this.ptyManager.execute(
                 `${adapter.command || 'agy'} ${finalArgs.map((a) => JSON.stringify(a)).join(' ')}`,
@@ -264,7 +276,10 @@ class ChatService {
               result = await this.ptyManager.executeCommand(adapter.command || 'codex', finalArgs, {
                 cwd: this.repoPath,
                 timeoutMs: 60000,
+                signal: turnControl.signal,
               });
+            if (result.quiescent === false) active.quiescent = false;
+            if (turnControl.signal.aborted) return `${label}: turn interrupted for takeover`;
             } else {
               result = await this.ptyManager.execute(
                 `${adapter.command || 'codex'} ${finalArgs.map((a) => JSON.stringify(a)).join(' ')}`,
@@ -329,7 +344,34 @@ class ChatService {
         throw new Error(errors.length ? errors.join(' | ') : 'No configured provider CLI is available');
       }
       return `${label}: (no reply, every provider failed) ${errors.join(' | ')}`;
-    });
+      } finally {
+        const current = this.activeTurns.get(activeKey);
+        if (current?.controller === turnControl) {
+          current.resolveDone?.();
+          this.activeTurns.delete(activeKey);
+        }
+      }
+    }, { agentId: agent.name, source: options.source || 'autonomous' });
+    return turnPromise;
+  }
+
+  async quiesceAgent(agentId, { timeoutMs = 10000 } = {}) {
+    const agent = await this.resolveAgent(agentId);
+    const key = agent.name;
+    this.scheduler.holdAgent(key);
+    this.scheduler.cancelQueuedForAgent(key);
+    const active = this.activeTurns.get(key);
+    if (!active) return { quiescent: true, agentId: key };
+    active.controller.abort(new Error('Takeover requested'));
+    const confirmed = await Promise.race([
+      active.done.then(() => active.quiescent),
+      new Promise((resolve) => setTimeout(() => resolve(false), timeoutMs)),
+    ]);
+    return { quiescent: confirmed, agentId: key, reason: confirmed ? undefined : 'Provider process did not confirm exit' };
+  }
+
+  resumeAgent(agentId) {
+    this.resolveAgent(agentId).then((agent) => this.scheduler.releaseAgent(agent.name));
   }
 }
 

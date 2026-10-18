@@ -358,6 +358,11 @@ messages may drive the agent's tools under the effective permission policy. Hand
 records guidance and rechecks assignment validity. If safe takeover fails, show a
 blocked state; do not claim control while autonomous work continues.
 
+Takeover is scoped to one agent. Concurrent requests for that agent conflict. Only
+the acquiring tab's session token may send takeover chat, release control, or open
+that agent's separate shell channel. Human chat continues in the agent's own provider
+session; shell access is an explicit mode.
+
 **PRD-CTRL-03 — Approval inbox.** Questions, permissions, reviews, merges, popup
 decisions, recovery uncertainty, and diagnostic proposals persist until resolved or
 explicitly superseded. Show requested action, evidence/revision, blocking effect,

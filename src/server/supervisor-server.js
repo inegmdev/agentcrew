@@ -11,6 +11,7 @@ const { VirtualTeamRoom } = require('../ui/team-room');
 const { IterationRunner } = require('../workflow/iteration-runner');
 const { WebSocketConnection } = require('./websocket');
 const { PtyManager } = require('../session/pty-manager');
+const { TakeoverController } = require('../session/takeover-controller');
 const { TurnScheduler } = require('../scheduler/turn-scheduler');
 const { ChatService } = require('../chat/chat-service');
 const { RepoDataService } = require('./repo-data-service');
@@ -37,7 +38,7 @@ class SupervisorServer {
     this.projectId = options.projectId || null;
     this.projectName = options.projectName || 'AgentCrew Workspace';
     this.scheduler = options.scheduler || new TurnScheduler({ maxConcurrency: 4 });
-    this.takeoverController = options.takeoverController;
+    this.takeoverController = options.takeoverController || new TakeoverController();
     this.popupEngine = options.popupEngine || new PopupScopeChangeEngine();
     this.observability = options.observability || new ObservabilityEngine();
     this.teamRoom = options.teamRoom || new VirtualTeamRoom();
@@ -54,12 +55,14 @@ class SupervisorServer {
       projectId: this.projectId,
       liveProviders: this.liveProviders,
     });
+    this.takeoverController.quiesceAgent = (agentId, opts) => this.chatService.quiesceAgent(agentId, opts);
 
     this.repoDataService = options.repoDataService || new RepoDataService({ repoPath: this.repoPath });
 
     this.eventBus = options.eventBus || new EventEmitter();
     this.sseClients = new Set();
     this.wsClients = new Set();
+    this.ptyOwners = new Map();
     this.cursorCounter = 0;
     this.httpServer = null;
     this.heartbeatInterval = null;
@@ -85,7 +88,7 @@ class SupervisorServer {
       });
 
       this.httpServer.on('upgrade', (req, socket, head) => {
-        this.handleUpgrade(req, socket, head);
+        this.handleUpgrade(req, socket, head).catch(() => socket.destroy());
       });
 
       this.httpServer.on('error', reject);
@@ -97,15 +100,23 @@ class SupervisorServer {
     });
   }
 
-  handleUpgrade(req, socket, head) {
+  async handleUpgrade(req, socket, head) {
     const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     if (parsedUrl.pathname === '/api/v1/pty') {
+      const requestedAgentId = parsedUrl.searchParams.get('agent_id') || 'Dev-1';
+      const agentId = (await this.chatService.resolveAgent(requestedAgentId)).name;
+      if (parsedUrl.searchParams.get('mode') !== 'shell' || !this.takeoverController.validateToken(agentId, parsedUrl.searchParams.get('token'))) {
+        socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
+        socket.destroy();
+        return;
+      }
       const ws = WebSocketConnection.accept(req, socket);
       if (!ws) return;
-
       this.wsClients.add(ws);
-      const agentId = parsedUrl.searchParams.get('agent_id') || 'Dev-1';
       const ptySession = this.ptyManager.createSession({ sessionId: `pty-${agentId}-${Date.now()}` });
+      const takeoverToken = parsedUrl.searchParams.get('token');
+      const ptyOwner = { agentId, takeoverToken, ptySession, ws, revoking: false };
+      this.ptyOwners.set(ptySession.id, ptyOwner);
 
       // Forward output from child process to WebSocket client
       ptySession.child.stdout.on('data', (chunk) => {
@@ -123,57 +134,34 @@ class SupervisorServer {
         cwd: ptySession.cwd
       }));
 
-      // Forward user input from WebSocket client to child process stdin or Agent Persona reasoning
-      ws.on('message', async (msg) => {
+      // This socket is an explicitly selected shell channel; chat uses HTTP/provider sessions.
+      ws.on('message', (msg) => {
         try {
+          if (ptyOwner.revoking) return;
+          if (!this.takeoverController.validateToken(agentId, takeoverToken)) {
+            ws.close();
+            ptySession.terminateTree();
+            return;
+          }
           const parsed = typeof msg === 'string' ? JSON.parse(msg) : JSON.parse(msg.toString('utf8'));
-          if (parsed.type === 'input') {
-            const rawInput = parsed.data || '';
-            const trimmed = rawInput.trim();
-
-            if (this.teamRoom) {
-              this.teamRoom.updateAgentState(agentId, { state: 'takeover' });
-            }
-
-            // Detect if input is natural language dialogue (e.g. "Hi", "Hello", "What are you working on?", questions)
-            const isShellCommand = /^(ls|cd|pwd|git|npm|node|cat|echo|mkdir|rm|cp|mv|grep|find|which|export|ps|kill|make|cargo|python|python3|agy|codex|gemini|touch|vi|nano|curl|wget)\b/i.test(trimmed);
-
-            if (!isShellCommand && trimmed.length > 0 && !trimmed.startsWith('./') && !trimmed.startsWith('/')) {
-              // Route to active Agent Persona reasoning
-              const response = await this.chatService.generateResponse(agentId, trimmed);
-              const formattedOutput = `\r\n\x1b[1;36m[${agentId}]\x1b[0m ${response}\r\n`;
-
-              // Send response back to connected WebSocket terminal
-              ws.send(JSON.stringify({ type: 'output', data: formattedOutput }));
-
-              // Trigger speech bubble in pixel room
-              this.broadcastEvent('agent_answered', {
-                agent_id: agentId,
-                pr_number: 'live',
-                question: trimmed,
-                answer: response,
-                cli_grounded: true,
-                timestamp: new Date().toISOString()
-              });
-            } else {
-              // Pipe standard command to interactive child shell
-              ptySession.write(parsed.data);
-            }
-          } else if (parsed.type === 'resize') {
+          if (parsed.type === 'input') ptySession.write(parsed.data || '');
+          else if (parsed.type === 'resize') {
             // resize event if available
           }
         } catch (_) {
-          ptySession.write(msg.toString());
+          ws.send(JSON.stringify({ type: 'error', data: 'Invalid shell input' }));
         }
       });
 
       ws.on('close', () => {
         this.wsClients.delete(ws);
+        this.ptyOwners.delete(ptySession.id);
         ptySession.kill();
       });
 
       ws.on('error', () => {
         this.wsClients.delete(ws);
+        this.ptyOwners.delete(ptySession.id);
         ptySession.kill();
       });
     } else {
@@ -391,8 +379,8 @@ class SupervisorServer {
       let result = null;
 
       if (command_type === 'session.takeover') {
-        const agentId = payload.agent_id;
-        const resObj = await this.takeoverController.requestTakeover();
+        const agentId = (await this.chatService.resolveAgent(payload.agent_id)).name;
+        const resObj = await this.takeoverController.requestTakeover(agentId);
         this.teamRoom.updateAgentState(agentId, { state: 'takeover' });
         result = {
           agent_id: agentId,
@@ -403,22 +391,40 @@ class SupervisorServer {
         this.broadcastEvent('takeover_started', result);
         this.broadcastEvent('takeover_quiesced', result);
       } else if (command_type === 'session.release') {
-        const agentId = payload.agent_id;
+        const agentId = (await this.chatService.resolveAgent(payload.agent_id)).name;
+        if (!this.takeoverController.validateToken(agentId, payload.takeover_token)) {
+          throw Object.assign(new Error('Valid takeover token required'), { statusCode: 403, code: 'INVALID_TAKEOVER_TOKEN' });
+        }
+        for (const [sessionId, owner] of this.ptyOwners) {
+          if (owner.agentId !== agentId) continue;
+          owner.revoking = true;
+          const quiescent = await owner.ptySession.terminateTree();
+          if (!quiescent) {
+            owner.revoking = false;
+            throw Object.assign(new Error('Shell process tree did not confirm exit; takeover remains active'), { statusCode: 409, code: 'SHELL_QUIESCENCE_UNKNOWN' });
+          }
+          owner.ws.close();
+          this.ptyOwners.delete(sessionId);
+        }
         const notes = payload.guidance_notes || payload.guidance || '';
-        const resObj = await this.takeoverController.release({ guidance: notes });
+        const resObj = await this.takeoverController.release({ agentId, guidance: notes });
+        this.chatService.resumeAgent(agentId);
         this.teamRoom.updateAgentState(agentId, { state: 'idle', activeTaskId: null });
         result = { agent_id: agentId, state: resObj.state, notes: resObj.guidance };
         this.broadcastEvent('takeover_released', result);
       } else if (command_type === 'session.exec' || command_type === 'session.command') {
-        const agentId = payload.agent_id || 'Dev-1';
+        const requestedAgentId = payload.agent_id || 'Dev-1';
+        const agentId = (await this.chatService.resolveAgent(requestedAgentId)).name;
         const cmd = (payload.command || payload.instruction || '').trim();
+        const mode = payload.mode || 'chat';
+        if (!this.takeoverController.validateToken(agentId, payload.takeover_token)) {
+          throw Object.assign(new Error('Valid takeover token required'), { statusCode: 403, code: 'INVALID_TAKEOVER_TOKEN' });
+        }
 
         let output = '';
-        const isShellCommand = /^(ls|cd|pwd|git|npm|node|cat|echo|mkdir|rm|cp|mv|grep|find|which|export|ps|kill|make|cargo|python|python3|agy|codex|gemini|touch|vi|nano|curl|wget)\b/i.test(cmd);
-
-        if (!isShellCommand && cmd.length > 0 && !cmd.startsWith('./') && !cmd.startsWith('/')) {
+        if (mode === 'chat' && cmd.length > 0) {
           // Route dialogue directly to active Agent Persona reasoning
-          output = await this.chatService.generateResponse(agentId, cmd);
+          output = await this.chatService.generateResponse(agentId, cmd, { source: 'human' });
           this.broadcastEvent('agent_answered', {
             agent_id: agentId,
             pr_number: 'live',
@@ -429,6 +435,7 @@ class SupervisorServer {
           });
         } else {
           try {
+            if (mode !== 'shell') throw Object.assign(new Error('mode must be chat or shell'), { statusCode: 400 });
             const execRes = await this.ptyManager.execute(cmd, { cwd: this.repoPath });
             output = execRes.stdout || execRes.stderr || `[Executed with exit code ${execRes.code}]`;
           } catch (e) {
@@ -502,7 +509,7 @@ class SupervisorServer {
         result
       });
     } catch (err) {
-      return this.jsonResponse(res, 500, { error: err.message });
+      return this.jsonResponse(res, err.statusCode || 500, { error: err.message, code: err.code });
     }
   }
 

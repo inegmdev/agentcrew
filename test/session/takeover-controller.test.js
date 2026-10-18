@@ -2,59 +2,34 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { TakeoverController } = require('../../src/session/takeover-controller');
 
-test('TakeoverController transitions from auto -> pausing -> human_owned within soft budget', async () => {
-  const controller = new TakeoverController({
-    sessionId: 'session-takeover-1',
-    softBudgetMs: 50,
-  });
-
-  assert.equal(controller.state, 'auto');
-
-  const acquirePromise = controller.requestTakeover();
-  assert.equal(controller.state, 'pausing');
-
-  await acquirePromise;
-  assert.equal(controller.state, 'human_owned');
-  assert.equal(controller.isAutonomousAllowed(), false);
+test('takeover ownership is per agent and token-bound', async () => {
+  const controller = new TakeoverController({ quiesceAgent: async () => ({ quiescent: true }) });
+  const first = await controller.requestTakeover('Dev-1');
+  const second = await controller.requestTakeover('Dev-2');
+  assert.equal(controller.getState('Dev-1'), 'human_owned');
+  assert.equal(controller.getState('Dev-2'), 'human_owned');
+  assert.equal(controller.validateToken('Dev-1', first.token), true);
+  assert.equal(controller.validateToken('Dev-1', second.token), false);
 });
 
-test('TakeoverController authorizes human-directed tools and denies autonomous tools', async () => {
+test('concurrent tab takeover conflicts and uncertain quiescence stays blocked', async () => {
+  let finish;
   const controller = new TakeoverController({
-    sessionId: 'session-takeover-2',
-    softBudgetMs: 10,
+    softBudgetMs: 100,
+    quiesceAgent: () => new Promise((resolve) => { finish = resolve; }),
   });
-
-  await controller.requestTakeover();
-
-  // Autonomous attempts are denied
-  const autoToolDecision = controller.evaluateToolCall({
-    source: 'autonomous',
-    toolName: 'read_file',
-  });
-  assert.equal(autoToolDecision.allowed, false);
-
-  // Human operator decisions are allowed
-  const humanToolDecision = controller.evaluateToolCall({
-    source: 'human',
-    toolName: 'read_file',
-  });
-  assert.equal(humanToolDecision.allowed, true);
+  const pending = controller.requestTakeover('Dev-1');
+  await assert.rejects(controller.requestTakeover('Dev-1'), { code: 'TAKEOVER_CONFLICT' });
+  finish({ quiescent: false, reason: 'process exit unknown' });
+  await assert.rejects(pending, { code: 'TAKEOVER_BLOCKED' });
+  assert.equal(controller.getState('Dev-1'), 'blocked');
+  assert.equal(controller.validateToken('Dev-1', 'anything'), false);
 });
 
-test('TakeoverController releases session back to auto with guidance notes', async () => {
-  const controller = new TakeoverController({
-    sessionId: 'session-takeover-3',
-    softBudgetMs: 10,
-  });
-
-  await controller.requestTakeover();
-  assert.equal(controller.state, 'human_owned');
-
-  const releaseResult = await controller.release({
-    guidance: 'Fixed syntax error in config; resume implementation.',
-  });
-
-  assert.equal(controller.state, 'auto');
-  assert.equal(releaseResult.guidance, 'Fixed syntax error in config; resume implementation.');
-  assert.equal(controller.isAutonomousAllowed(), true);
+test('release requires owned session and records guidance', async () => {
+  const controller = new TakeoverController({ quiesceAgent: async () => ({ quiescent: true }) });
+  await controller.requestTakeover('Dev-1');
+  const release = await controller.release({ agentId: 'Dev-1', guidance: 'Resume from the repaired config.' });
+  assert.equal(release.guidance, 'Resume from the repaired config.');
+  assert.equal(controller.getState('Dev-1'), 'auto');
 });

@@ -289,3 +289,8 @@ PR metadata and diff from `gh`, supplies them to the provider-backed ChatService
 and surfaces GitHub/provider failures without generating fallback review text.
 Drawer renders returned text safely. Added API/provider-path, provider-error,
 ChatService context/error, and live PR-context tests. TRD §12 documents behavior.
+
+TASK-36 makes `agentcrew server` bind to `127.0.0.1` by default; `--host` is
+required for LAN binding. README documents LAN and email-protected Cloudflare Quick
+Tunnel access, and the repository convention requires PRs for `main`. Added a
+Linux pull-request workflow that runs `npm test`.

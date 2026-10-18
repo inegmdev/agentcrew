@@ -75,7 +75,7 @@ architectural changes, a Backlog decision.
 | Consolidation | Writes MEMORY.proposed.md; no automatic application | Keep default; add policy-controlled versioned application in new supervisor |
 | Agent invocation | One-shot headless command selection; only Claude -p marked verified | Replace supervised path with provider plugins; retain legacy compatibility |
 | State | Installer registry and Markdown | Add per-project event store, artifacts, commands, sessions, and projections |
-| Validation | No test directory or CI workflow currently present | Build fixture/contract/workflow/browser/platform suites |
+| Validation | Node test suite; pull-request CI runs `npm test` on Linux | Expand fixture/contract/workflow/browser/platform suites |
 | UI | None for the supervisor | Ship compiled dashboard assets with supervisor |
 
 The old task-1 through task-10 backlog is historical planning input. Do not implement
@@ -1103,11 +1103,14 @@ clocks and IDs; tests should not sleep for watchdog/review budgets.
 
 ### 16.3 CI and local qualification
 
-Create credential-free Linux/Windows jobs for unit, contracts, workflows, artifact
+Pull requests run the existing credential-free `npm test` suite on Linux. Changes
+to `main` follow the repository convention: use a pull request and require passing
+CI checks; GitHub branch protection is configured separately by repository owners.
+Expand to credential-free Linux/Windows jobs for unit, contracts, workflows, artifact
 integration, and real local Git tests. Run browser tests with mock providers. Build
 the UI, validate package contents, run setup twice against fixtures, and verify that
 compiled assets work without a development server. Pin supported Node/dependency
-versions. No existing CI was run for this documentation task because none exists.
+versions.
 
 Record real provider transcripts locally into sanitized, versioned fixtures. Every
 vendor-specific mocked behavior points to captured evidence; intentionally synthetic

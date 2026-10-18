@@ -11,6 +11,7 @@ const { installSkills } = require('../src/steps/installSkills');
 const { startDaemon } = require('../src/daemon');
 const { consolidate } = require('../src/daemon/consolidate');
 const { SupervisorServer } = require('../src/server/supervisor-server');
+const { parseServerHost } = require('../src/server/options');
 const { WorkspaceManager } = require('../src/workspace/manager');
 const { TurnScheduler } = require('../src/scheduler/turn-scheduler');
 const { TakeoverController } = require('../src/session/takeover-controller');
@@ -116,11 +117,14 @@ function runConsolidate(projectPath) {
 
 async function runServer(portArg, extraArgs = []) {
   const port = parseInt(portArg, 10) || 3000;
+  const serverArgs = portArg && portArg.startsWith('--')
+    ? [portArg, ...extraArgs]
+    : extraArgs;
 
   let dir = path.join(process.env.HOME || '', '.agentcrew');
-  const dirIdx = extraArgs.indexOf('--dir');
-  if (dirIdx !== -1 && extraArgs[dirIdx + 1]) {
-    dir = path.resolve(extraArgs[dirIdx + 1]);
+  const dirIdx = serverArgs.indexOf('--dir');
+  if (dirIdx !== -1 && serverArgs[dirIdx + 1]) {
+    dir = path.resolve(serverArgs[dirIdx + 1]);
   }
 
   const workspace = new WorkspaceManager({ baseDir: dir });
@@ -134,13 +138,7 @@ async function runServer(portArg, extraArgs = []) {
   const scheduler = new TurnScheduler({ maxConcurrentTurns: 4 });
   const takeoverController = new TakeoverController({ softBudgetMs: 10000 });
 
-  let host = '0.0.0.0';
-  const hostIdx = extraArgs.indexOf('--host');
-  if (hostIdx !== -1 && extraArgs[hostIdx + 1]) {
-    host = extraArgs[hostIdx + 1];
-  } else if (process.env.HOST) {
-    host = process.env.HOST;
-  }
+  const host = parseServerHost(serverArgs);
 
   const server = new SupervisorServer({
     port,
@@ -229,7 +227,7 @@ async function main() {
         '  agentcrew update                    Re-run setup for every registered project\n' +
         '  agentcrew daemon [path]             Watch the board; journal and consolidate\n' +
         '  agentcrew consolidate [path]        Propose a distilled MEMORY.md now\n' +
-        '  agentcrew server [port]             Run AI Team Workspace HTTP/SSE supervisor\n' +
+        '  agentcrew server [port] [--host address] Run AI Team Workspace HTTP/SSE supervisor\n' +
         '  agentcrew iterate [goal]            Run automated 13-agent iteration cycle\n'
     );
   }

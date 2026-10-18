@@ -122,6 +122,40 @@ Open **`http://127.0.0.1:3000`** in your browser to interact with:
 - **Observability Dashboard**: Cycle times, QA pass rates, and provider qualification readiness.
 - **Real-Time SSE Stream**: Automatic updates pushed over Server-Sent Events (`/api/v1/events`).
 
+#### Access from another device or through Cloudflare
+
+The server listens only on this computer by default. To allow devices on your
+trusted LAN to connect, bind all interfaces explicitly:
+
+```bash
+npm run server -- --host 0.0.0.0
+# or
+agentcrew server 3000 --host 0.0.0.0
+```
+
+Use this computer's LAN address (for example,
+`http://192.168.100.50:3000`) from the other device. Allow TCP port 3000 in the
+computer's firewall only on the trusted private network.
+
+For temporary remote access, use a recent `cloudflared` with an email-protected
+Quick Tunnel. The dashboard can execute commands, so authorize only your own
+email address:
+
+```bash
+cloudflared tunnel --url http://127.0.0.1:3000 --allowed-mail you@example.com
+```
+
+Open the HTTPS URL printed by `cloudflared` and confirm the email challenge
+before using the dashboard. Quick Tunnel URLs are temporary; stop the tunnel
+when finished. Older `cloudflared` versions without `--allowed-mail` must not
+expose this server. Do not use `localtunnel` for this server.
+
+#### Repository changes
+
+Changes to `main` go through a pull request and its passing CI checks. Do not
+push commits directly to `main`; repository branch protection is managed in
+GitHub settings and is not changed by this project configuration.
+
 ---
 
 ### Step 3: Run an Iteration with Your AI Team

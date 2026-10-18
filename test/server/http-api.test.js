@@ -53,6 +53,13 @@ test('SupervisorServer serves TRD §12 API routes and SSE stream', async (t) => 
     }),
     async quiesceAgent() { return { quiescent: true }; },
     resumeAgent() {},
+    async probeProviders() {
+      return [
+        { name: 'agy', status: 'available', available: true, capabilities: [] },
+        { name: 'codex', status: 'available', available: true, capabilities: [] },
+        { name: 'gemini', status: 'unavailable', available: false, capabilities: [], reason: "Runner 'gemini' was not found on PATH" },
+      ];
+    },
     async generateResponse(agentId, prompt, options) {
       capturedReview = { agentId, prompt, options };
       if (providerFailure) throw new Error('codex: quota exceeded');
@@ -78,9 +85,6 @@ test('SupervisorServer serves TRD §12 API routes and SSE stream', async (t) => 
   });
 
   await t.test('GET /api/v1/readiness reports qualified provider status', async () => {
-    server.chatService.adapters.gemini.probe = async () => ({
-      id: 'gemini', available: false, reason: "Runner 'gemini' was not found on PATH", capabilities: [],
-    });
     const res = await fetch(`${baseUrl}/api/v1/readiness`);
     assert.equal(res.status, 200);
     const data = await res.json();

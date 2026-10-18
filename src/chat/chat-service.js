@@ -228,7 +228,9 @@ class ChatService {
 
       if (!this.liveProviders) {
         if (options.throwOnProviderError) throw new Error('Live providers are disabled');
-        return `${label}: [offline] ${prompt}`;
+        const reply = `${label}: [offline] ${prompt}`;
+        options.onChunk?.(reply);
+        return reply;
       }
 
       // Check for active persistent session for this agent
@@ -249,6 +251,41 @@ class ChatService {
         if (turnControl.signal.aborted) return `${label}: turn interrupted for takeover`;
         const adapter = this.adapters[name];
         try {
+          let streamBuffer = '';
+          let streamedText = '';
+          const publishLine = (line) => {
+            if (!line.trim()) return;
+            let event;
+            try {
+              event = JSON.parse(line);
+            } catch (_) {
+              event = { type: 'raw.output', text: line };
+            }
+            const normalized = adapter.parseStreamEvent(line) || event;
+            let text = normalized.type === 'message.assistant' ? normalized.text : null;
+            if (!text && typeof event.delta === 'string') text = event.delta;
+            if (!text && typeof event.text_delta === 'string') text = event.text_delta;
+            if (!text && event.type === 'raw.output') text = event.text;
+            if (text) {
+              const delta = streamedText && text.startsWith(streamedText)
+                ? text.slice(streamedText.length)
+                : text;
+              if (delta) {
+                streamedText += delta;
+                options.onChunk?.(delta);
+              }
+            }
+          };
+          const onStdout = (chunk) => {
+            streamBuffer += chunk;
+            const lines = streamBuffer.split(/\r?\n/);
+            streamBuffer = lines.pop();
+            for (const line of lines) publishLine(line);
+          };
+          const flushStream = () => {
+            if (streamBuffer) publishLine(streamBuffer);
+            streamBuffer = '';
+          };
           // Model selection: only apply model if calling assigned provider, and avoid obsolete/unsupported placeholders
           let modelArg = null;
           if (name === agent.provider && agent.model && agent.model !== 'gemini-2.5-pro' && agent.model !== 'o3') {
@@ -267,20 +304,18 @@ class ChatService {
 
           let result = null;
           if (name === 'agy') {
-            // Adapt agy flags to attach prompt argument without shell escaping and request JSON output for session tracking
+            // Attach the prompt and preserve the provider's line-stream output for live delivery.
             const finalArgs = spawnArgs
               .map((arg) => (arg === '-p' ? `-p=${promptInstructions}` : arg))
-              .filter((arg) => arg !== '--input-format' && arg !== 'stream-json' && arg !== '--output-format');
-
-            if (!finalArgs.includes('--output-format') && !finalArgs.some(a => a.startsWith('--output-format='))) {
-              finalArgs.push('--output-format', 'json');
-            }
+              .filter((arg) => arg !== '--input-format' && arg !== 'stream-json');
+            finalArgs.push('--output-format', 'stream-json');
 
             if (this.ptyManager.executeCommand) {
               result = await this.ptyManager.executeCommand(adapter.command || 'agy', finalArgs, {
                 cwd: this.repoPath,
                 timeoutMs: 45000,
                 signal: turnControl.signal,
+                onStdout,
               });
             if (result.quiescent === false) active.quiescent = false;
             if (turnControl.signal.aborted) return `${label}: turn interrupted for takeover`;
@@ -290,10 +325,16 @@ class ChatService {
                 { cwd: this.repoPath, timeoutMs: 45000 }
               );
             }
+            flushStream();
 
             let text = '';
-            try {
-              const data = JSON.parse(result.stdout || '{}');
+            for (const line of (result.stdout || '').split(/\r?\n/)) {
+              let data;
+              try {
+                data = JSON.parse(line);
+              } catch (_) {
+                continue;
+              }
               if (data.conversation_id) {
                 await this.saveAgentSession(agent.name, {
                   provider: 'agy',
@@ -303,13 +344,14 @@ class ChatService {
               if (data.response) {
                 text = data.response.trim();
               }
-            } catch (_) {}
+            }
 
             if (!text) {
-              text = (result.stdout || '').trim();
+              text = streamedText || (result.stdout || '').trim();
             }
 
             if (text && !result.timedOut && result.code === 0) {
+              if (!streamedText) options.onChunk?.(text);
               return `${label} [provider: ${name}]: ${text}`;
             }
           } else if (name === 'codex') {
@@ -320,6 +362,7 @@ class ChatService {
                 cwd: this.repoPath,
                 timeoutMs: 60000,
                 signal: turnControl.signal,
+                onStdout,
               });
             if (result.quiescent === false) active.quiescent = false;
             if (turnControl.signal.aborted) return `${label}: turn interrupted for takeover`;
@@ -329,6 +372,7 @@ class ChatService {
                 { cwd: this.repoPath, timeoutMs: 60000 }
               );
             }
+            flushStream();
 
             // Parse response events and capture thread_id for session tracking
             let answerText = '';
@@ -368,8 +412,10 @@ class ChatService {
                 answerText = (result.stdout || '').trim();
               }
             }
+            if (streamedText && (!answerText || answerText.startsWith('{'))) answerText = streamedText;
 
             if (answerText && !result.timedOut && result.code === 0) {
+              if (!streamedText) options.onChunk?.(answerText);
               return `${label} [provider: ${name}]: ${answerText}`;
             }
           } else if (name === 'gemini') {
@@ -377,15 +423,21 @@ class ChatService {
             result = await this.ptyManager.executeCommand(adapter.command || 'gemini', finalArgs, {
               cwd: this.repoPath,
               timeoutMs: 60000,
+              signal: turnControl.signal,
+              onStdout,
             });
+            if (result.quiescent === false) active.quiescent = false;
+            if (turnControl.signal.aborted) return `${label}: turn interrupted for takeover`;
+            flushStream();
             let answerText = '';
             for (const line of (result.stdout || '').split('\n')) {
               const event = adapter.parseStreamEvent(line);
               if (event?.type === 'message' && event.content) answerText = event.content;
               if (event?.type === 'result' && event.response) answerText = event.response;
             }
-            if (!answerText) answerText = (result.stdout || '').trim();
+            if (!answerText) answerText = streamedText || (result.stdout || '').trim();
             if (answerText && !result.timedOut && result.code === 0) {
+              if (!streamedText) options.onChunk?.(answerText);
               return `${label} [provider: ${name}]: ${answerText}`;
             }
           }

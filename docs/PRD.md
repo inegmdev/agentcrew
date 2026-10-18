@@ -458,6 +458,8 @@ conversation/session controls. Provide the minimal isometric pixel-art office as
 secondary map view. Show named identities, role, provider/model, and real activity
 badges. Simple animation reflects real state; never invent meetings or work. Offer
 equivalent keyboard/list navigation, reduced motion, and text labels for state.
+During a chat turn, show a thinking state and reveal reply text as provider output
+arrives. Clear the activity state after success, failure, timeout, or disconnect.
 
 **PRD-UI-04 — Sessions and artifacts.** Display user/agent messages, tools, outcomes,
 questions, permissions, interruptions, and handoffs in order. Show provider/model,

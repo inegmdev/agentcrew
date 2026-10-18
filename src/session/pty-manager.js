@@ -158,7 +158,7 @@ class PtyManager extends EventEmitter {
     });
   }
 
-  async executeCommand(binary, args = [], { timeoutMs = 45000, cwd, stdinInput, signal } = {}) {
+  async executeCommand(binary, args = [], { timeoutMs = 45000, cwd, stdinInput, signal, onStdout } = {}) {
     return new Promise((resolve, reject) => {
       if (signal?.aborted) return resolve({ stdout: '', stderr: 'Cancelled before spawn', code: -1, interrupted: true, quiescent: true });
       const child = spawn(binary, args, {
@@ -179,7 +179,11 @@ class PtyManager extends EventEmitter {
       let stdout = '';
       let stderr = '';
 
-      child.stdout.on('data', (c) => { stdout += c.toString('utf8'); });
+      child.stdout.on('data', (c) => {
+        const text = c.toString('utf8');
+        stdout += text;
+        if (typeof onStdout === 'function') onStdout(text);
+      });
       child.stderr.on('data', (c) => { stderr += c.toString('utf8'); });
 
       let finished = false;

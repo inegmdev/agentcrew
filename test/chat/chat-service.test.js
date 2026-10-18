@@ -85,6 +85,31 @@ test('ChatService uses adapter buildSpawnArgs when invoking provider', async () 
   assert.ok(reply.includes('I am Alice'));
 });
 
+test('ChatService publishes provider deltas as stdout arrives and returns their assembled reply', async () => {
+  const chunks = [];
+  const mockCodex = new CodexAdapter();
+  mockCodex.buildSpawnArgs = () => ['exec', '--json'];
+  const service = new ChatService({
+    liveProviders: true,
+    adapters: { codex: mockCodex },
+    which: (bin) => bin === 'codex',
+    ptyManager: {
+      async executeCommand(_binary, _args, options) {
+        options.onStdout('{"type":"delta","delta":"Hello "}\n');
+        options.onStdout('{"type":"delta","delta":"there"}\n');
+        return { stdout: '', stderr: '', code: 0 };
+      }
+    }
+  });
+
+  const answer = await service.generateResponse('Arthur', 'Say hello', {
+    onChunk: (chunk) => chunks.push(chunk)
+  });
+
+  assert.deepEqual(chunks, ['Hello ', 'there']);
+  assert.ok(answer.includes('Hello there'));
+});
+
 test('ChatService fails over to next available provider if primary fails', async () => {
   const mockAgy = new AgyAdapter();
   mockAgy.buildSpawnArgs = () => ['-p'];

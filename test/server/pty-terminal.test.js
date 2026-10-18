@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const http = require('node:http');
 const net = require('node:net');
 const crypto = require('node:crypto');
+const EventEmitter = require('node:events');
 
 const { SupervisorServer } = require('../../src/server/supervisor-server');
 const { WebSocketConnection } = require('../../src/server/websocket');
@@ -89,4 +90,45 @@ test('SupervisorServer chatService generates persona responses for all agent rol
 
   const qaRes = await server.chatService.generateResponse('QA-1', 'Hi');
   assert.ok(qaRes.includes('QA-1') || qaRes.includes('test') || qaRes.includes('verification') || qaRes.includes('Tester'), `Expected QA in ${qaRes}`);
+});
+
+test('PTY chat streams chunks and clears room thinking state after provider timeout', async () => {
+  const server = new SupervisorServer({ liveProviders: false });
+  const frames = [];
+  const broadcasts = [];
+  const ws = new EventEmitter();
+  ws.isClosed = false;
+  ws.send = (frame) => frames.push(JSON.parse(frame));
+  server.takeoverController.sessions.set('Dev-1', { state: 'human_owned', token: 'test-token' });
+  server.broadcastEvent = (name, data) => broadcasts.push({ name, data });
+  server.chatService = {
+    async resolveAgent(agentId) { return { name: agentId }; },
+    async generateResponse(_agent, _prompt, { onChunk }) {
+      onChunk('partial ');
+      onChunk('reply');
+      throw new Error('codex: timed out');
+    }
+  };
+
+  const accept = WebSocketConnection.accept;
+  WebSocketConnection.accept = () => ws;
+  try {
+    await server.handleUpgrade({ url: '/api/v1/pty?mode=chat&agent_id=Dev-1&token=test-token', headers: { host: 'localhost' } }, {}, Buffer.alloc(0));
+    ws.emit('message', JSON.stringify({ type: 'input', data: 'Please respond\n' }));
+    for (let i = 0; i < 20 && !frames.some((frame) => frame.type === 'chat_failed'); i++) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+
+    assert.deepEqual(frames.map((frame) => frame.type), [
+      'ready', 'chat_started', 'chat_chunk', 'chat_chunk', 'chat_failed'
+    ]);
+    assert.equal(frames[2].text, 'partial ');
+    assert.equal(frames[3].text, 'reply');
+    assert.match(frames[4].error, /timed out/);
+    assert.equal(server.teamRoom.getAgentState('Dev-1').state, 'takeover');
+    assert.deepEqual(broadcasts.map((event) => event.name), ['agent_thinking', 'agent_thinking_ended']);
+    assert.equal(broadcasts[1].data.outcome, 'failed');
+  } finally {
+    WebSocketConnection.accept = accept;
+  }
 });

@@ -915,6 +915,14 @@ the authenticated connection is restored. Persisted command IDs let the browser 
 results of requests whose HTTP response was lost. Multiple tabs share the same server
 state and optimistic versions; no tab privately owns an approval.
 
+The interactive `/api/v1/pty` WebSocket carries chat turn frames with a stable
+`turn_id`: `chat_started`, ordered `chat_chunk` (`text`), then `chat_completed`
+(`answer`) or `chat_failed` (`error`). A companion SSE `agent_thinking` event starts
+the pixel-room activity badge; `agent_thinking_ended` clears it on completion,
+provider failure, timeout, or socket disconnect. Provider stdout is parsed as
+newline-delimited events and normalized text is forwarded as it arrives; final
+completion remains authoritative for the assembled reply.
+
 ### 12.3 UI composition
 
 Build routes for setup, planning/artifacts, Kanban, team room, observability, session

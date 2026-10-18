@@ -1005,6 +1005,16 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
 
+    sse.addEventListener('agent_thinking', (e) => {
+      const data = JSON.parse(e.data);
+      pixelRenderer?.updateAgentStates([{ name: data.agent_id, state: 'thinking' }]);
+    });
+
+    sse.addEventListener('agent_thinking_ended', (e) => {
+      const data = JSON.parse(e.data);
+      pixelRenderer?.updateAgentStates([{ name: data.agent_id, state: data.state || 'idle' }]);
+    });
+
     sse.addEventListener('command_executed', (e) => {
       const data = JSON.parse(e.data);
       if (pixelRenderer && data.agent_id) {
@@ -1045,7 +1055,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (cmdInput) cmdInput.disabled = false;
         if (btnSendCmd) btnSendCmd.disabled = false;
         if (cmdInput) cmdInput.focus();
-        if (inputMode === 'shell') connectPty(agentId);
+        connectPty(agentId);
         if (pixelRenderer) {
           pixelRenderer.showSpeechBubble(agentId, 'Operator Live Takeover', 8000);
         }
@@ -1108,7 +1118,7 @@ document.addEventListener('DOMContentLoaded', () => {
           : 'Message your teammate… (prefix with ! to run a command)';
       }
       disconnectPty();
-      if (inputMode === 'shell' && !btnRelease.disabled) {
+      if (!btnRelease.disabled) {
         connectPty(selectedAgentName || agentSelect?.value || 'Dev-1');
       }
     });
@@ -1122,14 +1132,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const token = takeoverTokens.get(agentId);
-    if (!token) { log('[PTY] Takeover token missing; shell remains disconnected', 'action'); return; }
-    const wsUrl = `${proto}//${window.location.host}/api/v1/pty?mode=shell&agent_id=${encodeURIComponent(agentId)}&token=${encodeURIComponent(token)}`;
+    if (!token) { log('[Session] Takeover token missing; connection unavailable', 'action'); return; }
+    const wsUrl = `${proto}//${window.location.host}/api/v1/pty?mode=${inputMode}&agent_id=${encodeURIComponent(agentId)}&token=${encodeURIComponent(token)}`;
 
     try {
       ptySocket = new WebSocket(wsUrl);
 
       ptySocket.onopen = () => {
-        log(`[PTY] Connected interactive pseudo-terminal session for ${agentId}`, 'success');
+        log(`[Session] Connected ${inputMode} channel for ${agentId}`, 'success');
       };
 
       ptySocket.onmessage = (event) => {
@@ -1137,6 +1147,14 @@ document.addEventListener('DOMContentLoaded', () => {
           const msg = JSON.parse(event.data);
           if (msg.type === 'ready') {
             log(`[PTY Ready] Session ${msg.sessionId} spawned (cwd: ${msg.cwd})`, 'system');
+          } else if (msg.type === 'chat_started') {
+            log(`[${msg.agent_id}] thinking…`, 'system');
+          } else if (msg.type === 'chat_chunk') {
+            log(msg.text, 'success');
+          } else if (msg.type === 'chat_completed') {
+            log(`[${msg.agent_id}] reply complete`, 'system');
+          } else if (msg.type === 'chat_failed') {
+            log(`[${msg.agent_id}] reply failed: ${msg.error}`, 'action');
           } else if (msg.type === 'output') {
             const raw = msg.data;
             const cleaned = raw
@@ -1187,8 +1205,8 @@ document.addEventListener('DOMContentLoaded', () => {
     log(`[Operator > ${agentId}]$ ${commandText}`, 'action');
     cmdInput.value = '';
 
-    if (inputMode === 'shell' && ptySocket && ptySocket.readyState === WebSocket.OPEN) {
-      ptySocket.send(JSON.stringify({ type: 'input', data: `${commandText}\n`, mode: 'shell' }));
+    if (ptySocket && ptySocket.readyState === WebSocket.OPEN) {
+      ptySocket.send(JSON.stringify({ type: 'input', data: commandText, mode: inputMode }));
     } else {
       // Fallback to HTTP command dispatch
       try {

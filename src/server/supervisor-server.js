@@ -106,7 +106,9 @@ class SupervisorServer {
     if (parsedUrl.pathname === '/api/v1/pty') {
       const requestedAgentId = parsedUrl.searchParams.get('agent_id') || 'Dev-1';
       const agentId = (await this.chatService.resolveAgent(requestedAgentId)).name;
-      if (parsedUrl.searchParams.get('mode') !== 'shell' || !this.takeoverController.validateToken(agentId, parsedUrl.searchParams.get('token'))) {
+      const mode = parsedUrl.searchParams.get('mode') || 'chat';
+      const takeoverToken = parsedUrl.searchParams.get('token');
+      if (!['chat', 'shell'].includes(mode) || !this.takeoverController.validateToken(agentId, takeoverToken)) {
         socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
         socket.destroy();
         return;
@@ -114,58 +116,109 @@ class SupervisorServer {
       const ws = WebSocketConnection.accept(req, socket);
       if (!ws) return;
       this.wsClients.add(ws);
-      const ptySession = this.ptyManager.createSession({ sessionId: `pty-${agentId}-${Date.now()}` });
-      const takeoverToken = parsedUrl.searchParams.get('token');
-      const ptyOwner = { agentId, takeoverToken, ptySession, ws, revoking: false };
-      this.ptyOwners.set(ptySession.id, ptyOwner);
+      const ptySession = mode === 'shell'
+        ? this.ptyManager.createSession({ sessionId: `pty-${agentId}-${Date.now()}` })
+        : null;
+      const ptyOwner = ptySession ? { agentId, takeoverToken, ptySession, ws, revoking: false } : null;
+      if (ptySession) this.ptyOwners.set(ptySession.id, ptyOwner);
+      const activeChatTurns = new Set();
+      const finishThinking = (turnId, outcome) => {
+        if (!activeChatTurns.delete(turnId)) return;
+        const state = activeChatTurns.size ? 'thinking' : 'idle';
+        this.teamRoom.updateAgentState(agentId, { state: state === 'idle' ? 'takeover' : state });
+        this.broadcastEvent('agent_thinking_ended', { turn_id: turnId, agent_id: agentId, state, outcome });
+      };
 
-      // Forward output from child process to WebSocket client
-      ptySession.child.stdout.on('data', (chunk) => {
-        ws.send(JSON.stringify({ type: 'output', data: chunk.toString('utf8') }));
-      });
-      ptySession.child.stderr.on('data', (chunk) => {
-        ws.send(JSON.stringify({ type: 'output', data: chunk.toString('utf8') }));
-      });
+      if (ptySession) {
+        ptySession.child.stdout.on('data', (chunk) => {
+          ws.send(JSON.stringify({ type: 'output', data: chunk.toString('utf8') }));
+        });
+        ptySession.child.stderr.on('data', (chunk) => {
+          ws.send(JSON.stringify({ type: 'output', data: chunk.toString('utf8') }));
+        });
+      }
 
       // Send initial greeting
       ws.send(JSON.stringify({
         type: 'ready',
-        sessionId: ptySession.id,
+        sessionId: ptySession?.id || null,
         agentId,
-        cwd: ptySession.cwd
+        cwd: ptySession?.cwd || this.repoPath,
+        mode
       }));
 
-      // This socket is an explicitly selected shell channel; chat uses HTTP/provider sessions.
-      ws.on('message', (msg) => {
+      ws.on('message', async (msg) => {
         try {
-          if (ptyOwner.revoking) return;
+          if (ptyOwner?.revoking) return;
           if (!this.takeoverController.validateToken(agentId, takeoverToken)) {
             ws.close();
-            ptySession.terminateTree();
+            ptySession?.terminateTree();
             return;
           }
           const parsed = typeof msg === 'string' ? JSON.parse(msg) : JSON.parse(msg.toString('utf8'));
           if (parsed.type === 'input') {
-            const input = resolveInput(parsed.data, 'shell');
-            if (input.text) ptySession.write(`${input.text}\n`);
+            const input = resolveInput(parsed.data, parsed.mode || mode);
+            if (!input.text) return;
+            if (mode === 'shell') {
+              if (input.mode !== 'shell') throw new Error('Shell socket accepts shell input only');
+              ptySession.write(`${input.text}\n`);
+            } else if (input.mode === 'shell') {
+              const result = await this.ptyManager.execute(input.text, { cwd: this.repoPath });
+              ws.send(JSON.stringify({ type: 'output', data: result.stdout || result.stderr || '' }));
+            } else {
+              const turnId = crypto.randomUUID();
+              activeChatTurns.add(turnId);
+              let outcome = 'failed';
+              const wsSend = (frame) => ws.send(JSON.stringify({ turn_id: turnId, agent_id: agentId, ...frame }));
+              this.teamRoom.updateAgentState(agentId, { state: 'thinking' });
+              this.broadcastEvent('agent_thinking', { turn_id: turnId, agent_id: agentId, state: 'thinking' });
+              wsSend({ type: 'chat_started' });
+              try {
+                const response = await this.chatService.generateResponse(agentId, input.text, {
+                  source: 'human',
+                  throwOnProviderError: true,
+                  onChunk: (text) => wsSend({ type: 'chat_chunk', text }),
+                });
+                outcome = 'completed';
+                wsSend({ type: 'chat_completed', answer: response });
+                this.broadcastEvent('agent_answered', {
+                  agent_id: agentId,
+                  pr_number: 'live',
+                  question: input.text,
+                  answer: response,
+                  cli_grounded: this.liveProviders,
+                  timestamp: new Date().toISOString()
+                });
+              } catch (error) {
+                wsSend({ type: 'chat_failed', error: error.message });
+              } finally {
+                finishThinking(turnId, outcome);
+              }
+            }
           } else if (parsed.type === 'resize') {
             // resize event if available
           }
         } catch (error) {
-          ws.send(JSON.stringify({ type: 'error', data: 'Invalid shell input' }));
+          ws.send(JSON.stringify({ type: 'error', data: `Invalid ${mode} input: ${error.message}` }));
         }
       });
 
       ws.on('close', () => {
         this.wsClients.delete(ws);
-        this.ptyOwners.delete(ptySession.id);
-        ptySession.kill();
+        for (const turnId of [...activeChatTurns]) finishThinking(turnId, 'disconnected');
+        if (ptySession) {
+          this.ptyOwners.delete(ptySession.id);
+          ptySession.kill();
+        }
       });
 
       ws.on('error', () => {
         this.wsClients.delete(ws);
-        this.ptyOwners.delete(ptySession.id);
-        ptySession.kill();
+        for (const turnId of [...activeChatTurns]) finishThinking(turnId, 'disconnected');
+        if (ptySession) {
+          this.ptyOwners.delete(ptySession.id);
+          ptySession.kill();
+        }
       });
     } else {
       socket.destroy();

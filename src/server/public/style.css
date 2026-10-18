@@ -1147,6 +1147,10 @@ textarea:focus-visible,
   overflow: hidden;
 }
 
+.agent-terminal-alert { margin: 0.35rem 1.1rem; padding: 0.55rem 0.7rem; border-radius: 8px; background: #fff0cf; color: #653800; font-size: 0.78rem; line-height: 1.45; }
+.agent-terminal-alert[hidden] { display: none; }
+[data-theme="dark"] .agent-terminal-alert { background: #3e2b10; color: #ffe4a6; }
+
 .remote-http-warning { position: fixed; z-index: 1000; right: 0.75rem; bottom: calc(0.75rem + env(safe-area-inset-bottom)); max-width: min(520px, calc(100vw - 1.5rem)); padding: 0.7rem 0.9rem; border-radius: 10px; background: #4a2c0a; color: #fff4dc; font-size: 0.78rem; line-height: 1.4; box-shadow: 0 10px 28px rgba(0,0,0,0.25); }
 .remote-http-warning[hidden] { display: none; }
 @media (max-width: 720px) { .remote-http-warning { bottom: calc(4.5rem + env(safe-area-inset-bottom)); } }
@@ -1158,7 +1162,7 @@ textarea:focus-visible,
 #terminal-mobile-keys[hidden], #takeover-shell-composer[hidden] { display: none !important; }
 #takeover-terminal-emulator .xterm { height: 100%; }
 .terminal-mobile-keys { display: flex; gap: 0.35rem; margin: 0.45rem 1.1rem 0; overflow-x: auto; }
-.terminal-mobile-keys button { min-width: 38px; min-height: 38px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--bg-surface); color: var(--text-primary); }
+.terminal-mobile-keys button { min-width: 44px; min-height: 44px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--bg-surface); color: var(--text-primary); }
 .terminal-mobile-keys button:focus-visible, .takeover-mode-button:focus-visible, .provider-backup-setting :focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
 .terminal-mobile-keys button[aria-pressed="true"] { color: var(--accent-primary); background: var(--accent-primary-subtle); }
 @media (min-width: 721px) and (hover: hover) and (pointer: fine) { .terminal-mobile-keys { display: none; } }

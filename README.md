@@ -226,12 +226,12 @@ sequenceDiagram
     Supervisor-->>Agent: Revalidate assignment & resume autonomous flow
 ```
 
-**How chat in the Takeover Console is routed today**
+**How takeover is routed today**
 
-- Shell-looking input (`ls`, `git`, `npm`, …) runs in the repo via an interactive `bash` over the `/api/v1/pty` WebSocket.
-- Anything else is a conversational message: the supervisor calls the agent's provider CLI (`agy --print` / `codex exec`) with a role prompt plus the repo's HEAD commit, failing over `agy` → `codex`.
-- If every provider fails, the chat shows the real error (e.g. `agy` quota 429) — never a canned reply.
-- Limits: each message is a one-shot call (no conversation memory, ~5–10 s latency) and agents do not yet use their own worktrees or tools. See backlog TASK-29..TASK-36.
+- Agent CLI opens the assigned provider's interactive TUI through a real PTY. Keystrokes, colors, cursor movement, and terminal resizing pass through the browser. A saved native conversation ID is passed to the CLI's resume command; the UI labels this as a resume request, and the operator should verify the CLI state.
+- Shell is a separate explicit mode. No command-looking text is silently redirected from the agent CLI to Shell.
+- An unavailable assigned provider leaves the agent disconnected. An operator may opt in to a specific per-agent backup CLI and model; the backup is labeled and starts/resumes its own conversation, without copying primary-provider context.
+- Headless provider replies show readable assistant text only. Metadata-only output is an error, not a JSON chat message. See backlog TASK-29..TASK-36.
 
 ---
 

@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const EventEmitter = require('node:events');
 const { AgentTerminal } = require('../../src/session/agent-terminal');
+const nativePty = require('node-pty');
 
 function fakeSpawn(log) {
   return (command, args, options) => {
@@ -45,4 +46,14 @@ test('agy terminal resumes its own conversation and missing Gemini remains disco
   assert.throws(() => new AgentTerminal({
     agent: { name: 'QA-1', provider: 'gemini' }, cwd: '/tmp/project', which: () => false,
   }).start(), /not qualified/);
+});
+
+test('Linux PTY release confirms its child process group has exited', { skip: process.platform !== 'linux' }, async () => {
+  const terminal = new AgentTerminal({
+    agent: { name: 'Dev-1', provider: 'codex', model: 'o3' },
+    cwd: process.cwd(), which: () => true,
+    spawn: (_command, _args, options) => nativePty.spawn('sh', ['-c', 'sleep 10 & wait'], options),
+  }).start();
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  assert.equal(await terminal.terminateTree(), true);
 });

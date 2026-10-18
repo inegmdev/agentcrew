@@ -138,18 +138,18 @@ class WorkspaceManager {
 
   async setAgentProviderConfig(projectId, agentId, { backupProvider = null, backupModel = null } = {}) {
     if (backupProvider !== null && !['agy', 'codex', 'gemini'].includes(backupProvider)) {
-      throw new Error('Unsupported backup provider');
+      throw Object.assign(new Error('Unsupported backup provider'), { statusCode: 400 });
     }
-    if (backupModel !== null && (typeof backupModel !== 'string' || backupModel.length > 120)) {
-      throw new Error('Invalid backup model');
+    if (backupModel !== null && (typeof backupModel !== 'string' || backupModel.length > 120 || !/^[A-Za-z0-9][A-Za-z0-9._:/+@-]*$/.test(backupModel))) {
+      throw Object.assign(new Error('Invalid backup model'), { statusCode: 400 });
     }
     const dbPath = path.join(this.baseDir, 'projects', projectId, 'agentcrew.db');
     const db = new DatabaseSync(dbPath);
     try {
       this.ensureAgentConfig(db);
       const row = db.prepare('SELECT provider FROM agents WHERE project_id = ? AND (id = ? OR name = ?)').get(projectId, agentId, agentId);
-      if (!row) throw new Error('Agent not found');
-      if (backupProvider === row.provider) throw new Error('Backup provider must differ from primary');
+      if (!row) throw Object.assign(new Error('Agent not found'), { statusCode: 404 });
+      if (backupProvider === row.provider) throw Object.assign(new Error('Backup provider must differ from primary'), { statusCode: 400 });
       db.prepare('UPDATE agents SET backup_provider = ?, backup_model = ? WHERE project_id = ? AND (id = ? OR name = ?)')
         .run(backupProvider, backupProvider ? backupModel : null, projectId, agentId, agentId);
     } finally {

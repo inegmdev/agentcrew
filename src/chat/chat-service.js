@@ -116,26 +116,22 @@ class ChatService {
     if (this.sessionCache.has(cacheKey)) {
       return this.sessionCache.get(cacheKey);
     }
-    if (this.workspace && this.projectId) {
-      try {
-        const session = await this.workspace.getAgentSession(this.projectId, agentId, provider);
-        if (session) {
-          this.sessionCache.set(cacheKey, session);
-          return session;
-        }
-      } catch (_) {}
+    if (this.workspace && this.projectId && typeof this.workspace.getAgentSession === 'function') {
+      const session = await this.workspace.getAgentSession(this.projectId, agentId, provider);
+      if (session) {
+        this.sessionCache.set(cacheKey, session);
+        return session;
+      }
     }
     return null;
   }
 
   async saveAgentSession(agentId, sessionData) {
+    if (this.workspace && this.projectId && typeof this.workspace.saveAgentSession === 'function') {
+      await this.workspace.saveAgentSession(this.projectId, agentId, sessionData);
+    }
     this.sessionCache.set(`${agentId}:${sessionData.provider}`, sessionData);
     this.sessionCache.set(`${agentId}:*`, sessionData);
-    if (this.workspace && this.projectId) {
-      try {
-        await this.workspace.saveAgentSession(this.projectId, agentId, sessionData);
-      } catch (_) {}
-    }
   }
 
   buildRolePrompt({ agentName, role, gitContext, reviewContext, userPrompt } = {}) {

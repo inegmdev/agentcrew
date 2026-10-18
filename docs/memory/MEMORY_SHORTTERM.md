@@ -326,3 +326,12 @@ reattachment; Shell remains separate. Existing native IDs resume in a new proces
 fresh TUI conversations are marked new and not claimed as resumable. Server startup
 reuses the workspace database to preserve settings. Non-loopback HTTP remains an
 explicit, unauthenticated short-lived test mode with a prominent warning.
+Two-axis review corrected stale README routing prose and premature resume wording,
+added Linux process-group exit confirmation, Windows fake takeover/WebSocket CI,
+and prevented a parallel headless turn while an agent TUI is active. A newly
+interactive conversation still lacks a reliable provider-native ID for later
+resume; the limitation is explicit rather than silently claiming continuity.
+Independent mobile UI review fixed hidden connection errors, stale Connected state,
+xterm screen-reader mode, 44px touch keys, and the Ctrl-key latch. Browser smoke
+confirmed a missing Gemini agent shows a visible unavailable reason and a fake
+Codex PTY survives same-tab refresh, accepts input, and releases cleanly.

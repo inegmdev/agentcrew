@@ -462,6 +462,9 @@ native resume errors must not be presented as successful handoff. Gemini remains
 unqualified and disconnected. A persisted, explicit per-agent backup provider/model
 may be selected only when the primary is unavailable; provider-native IDs are stored
 separately and context is not transferred between providers.
+The current CLI TUI path cannot reliably obtain a native ID for a newly created
+interactive conversation; until that provider contract is qualified, it labels
+such sessions new and does not promise resume after release.
 
 ```mermaid
 sequenceDiagram

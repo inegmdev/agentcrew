@@ -23,4 +23,4 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: node --test test/chat/chat-service.test.js test/session/agent-terminal.test.js test/workspace/manager.test.js
+      - run: node --test test/chat/chat-service.test.js test/session/agent-terminal.test.js test/server/agent-tui-websocket.test.js test/workspace/manager.test.js

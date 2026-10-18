@@ -245,6 +245,22 @@ test('ChatService does not call plain Codex stdout an assistant reply', async ()
   assert.deepEqual(chunks, []);
 });
 
+test('ChatService does not start a fresh provider conversation when session storage fails', async () => {
+  let invoked = false;
+  const service = new ChatService({
+    liveProviders: true,
+    projectId: 'project-1',
+    workspace: {
+      async listAgents() { return [{ name: 'Alice', role: 'Business Analyst', provider: 'agy', model: 'gemini-2.5-pro' }]; },
+      async getAgentSession() { throw new Error('session database unavailable'); },
+    },
+    which: (bin) => bin === 'agy',
+    ptyManager: { async executeCommand() { invoked = true; return { stdout: '', stderr: '', code: 0 }; } },
+  });
+  await assert.rejects(service.generateResponse('Alice', 'Hello', { throwOnProviderError: true }), /session database unavailable/);
+  assert.equal(invoked, false);
+});
+
 test('ChatService includes review context in provider prompt and throws when all providers fail', async () => {
   let invokedPrompt = '';
   const mockAgy = new AgyAdapter();

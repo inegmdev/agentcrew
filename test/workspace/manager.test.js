@@ -97,6 +97,7 @@ test('WorkspaceManager persists explicit backup settings and separate provider c
   assert.equal((await manager.getAgentSession(project.id, 'QA-1', 'gemini')).sessionId, 'gemini-1');
   assert.equal((await manager.getAgentSession(project.id, 'QA-1', 'codex')).sessionId, 'codex-1');
   await assert.rejects(manager.setAgentProviderConfig(project.id, 'QA-1', { backupProvider: 'gemini' }), /differ/);
+  await assert.rejects(manager.setAgentProviderConfig(project.id, 'QA-1', { backupProvider: 'codex', backupModel: 'bad model' }), /Invalid backup model/);
   const restarted = new WorkspaceManager({ baseDir: tmpDir });
   const sameProject = await restarted.getOrInitProject({ repoPath: tmpDir, name: 'test' });
   assert.equal(sameProject.id, project.id);

@@ -350,6 +350,7 @@
                 </select>
                 <input id="agent-backup-model" type="text" placeholder="Backup model (optional)" aria-label="Backup model">
                 <button id="save-agent-backup" class="btn btn-sm btn-secondary" type="button">Save</button>
+                <span id="agent-backup-feedback" role="status"></span>
               </div>
 
               <div class="agent-workspace-context">
@@ -370,6 +371,7 @@
                 </div>
                 <span class="console-presence"><i></i> <span id="agent-session-state">Ready</span></span>
               </div>
+              <p id="agent-terminal-alert" class="agent-terminal-alert" role="alert" hidden></p>
               <div id="takeover-terminal" class="terminal-log agent-session-output" aria-label="Agent session output">
                 <div id="takeover-terminal-log" aria-live="polite"><div class="term-line system">[System] Select an agent to inspect its session.</div></div>
                 <div id="takeover-terminal-emulator" hidden aria-label="Interactive agent CLI terminal"></div>

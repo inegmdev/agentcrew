@@ -69,6 +69,7 @@ class SupervisorServer {
     this.wsClients = new Set();
     this.ptyOwners = new Map();
     this.agentTerminals = new Map();
+    this.agentTerminalStarts = new Set();
     this.humanTurns = new Map();
     this.cursorCounter = 0;
     this.httpServer = null;
@@ -248,38 +249,47 @@ class SupervisorServer {
   }
 
   async handleAgentTerminalUpgrade(req, socket, agentId, takeoverToken) {
+    if (!req.headers['sec-websocket-key']) {
+      socket.destroy();
+      return;
+    }
     let owner = this.agentTerminals.get(agentId);
-    if (owner?.ws && !owner.ws.isClosed) {
+    if (this.agentTerminalStarts.has(agentId) || (owner?.ws && !owner.ws.isClosed)) {
       socket.write('HTTP/1.1 409 Conflict\r\nConnection: close\r\n\r\n');
       socket.destroy();
       return;
     }
     if (!owner) {
-      const agent = await this.chatService.resolveAgent(agentId);
-      const reports = await this.chatService.probeProviders();
-      const available = new Map(reports.map((report) => [report.name, report.available]));
-      const candidates = [agent.provider, agent.backupProvider].filter(Boolean);
-      const provider = candidates.find((name) => ['agy', 'codex'].includes(name) && available.get(name) && this.which(name));
-      if (!provider) {
-        socket.write('HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n');
-        socket.destroy();
-        return;
+      this.agentTerminalStarts.add(agentId);
+      try {
+        const agent = await this.chatService.resolveAgent(agentId);
+        const reports = await this.chatService.probeProviders();
+        const available = new Map(reports.map((report) => [report.name, report.available]));
+        const candidates = [agent.provider, agent.backupProvider].filter(Boolean);
+        const provider = candidates.find((name) => ['agy', 'codex'].includes(name) && available.get(name) && this.which(name));
+        if (!provider) {
+          socket.write('HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n');
+          socket.destroy();
+          return;
+        }
+        const session = this.workspace && this.projectId
+          ? await this.workspace.getAgentSession(this.projectId, agentId, provider)
+          : await this.chatService.getAgentSession(agentId, provider);
+        const terminal = this.agentTerminalFactory({
+          agent: { ...agent, provider, model: provider === agent.provider ? agent.model : agent.backupModel },
+          session,
+          cwd: this.repoPath,
+          which: this.which,
+        }).start();
+        owner = { agentId, takeoverToken, terminal, ws: null, provider, fallback: provider !== agent.provider, revoking: false };
+        this.agentTerminals.set(agentId, owner);
+        terminal.on('exit', ({ exitCode, signal }) => {
+          if (owner.ws && !owner.ws.isClosed) owner.ws.send(JSON.stringify({ type: 'exit', exitCode, signal }));
+          this.agentTerminals.delete(agentId);
+        });
+      } finally {
+        this.agentTerminalStarts.delete(agentId);
       }
-      const session = this.workspace && this.projectId
-        ? await this.workspace.getAgentSession(this.projectId, agentId, provider)
-        : await this.chatService.getAgentSession(agentId, provider);
-      const terminal = this.agentTerminalFactory({
-        agent: { ...agent, provider, model: provider === agent.provider ? agent.model : agent.backupModel },
-        session,
-        cwd: this.repoPath,
-        which: this.which,
-      }).start();
-      owner = { agentId, takeoverToken, terminal, ws: null, provider, fallback: provider !== agent.provider, revoking: false };
-      this.agentTerminals.set(agentId, owner);
-      terminal.on('exit', ({ exitCode, signal }) => {
-        if (owner.ws && !owner.ws.isClosed) owner.ws.send(JSON.stringify({ type: 'exit', exitCode, signal }));
-        this.agentTerminals.delete(agentId);
-      });
     }
     const ws = WebSocketConnection.accept(req, socket);
     if (!ws) return;
@@ -287,7 +297,7 @@ class SupervisorServer {
     this.wsClients.add(ws);
     ws.send(JSON.stringify({
       type: 'ready', mode: 'agent_tui', agentId, provider: owner.provider,
-      fallback: owner.fallback, resumed: Boolean(owner.terminal.session?.sessionId),
+      fallback: owner.fallback, resumeRequested: Boolean(owner.terminal.session?.sessionId),
       sessionId: owner.terminal.session?.sessionId || null, cwd: this.repoPath,
     }));
     if (owner.terminal.output) ws.send(JSON.stringify({ type: 'output', data: owner.terminal.output }));
@@ -459,7 +469,7 @@ class SupervisorServer {
         const liveState = this.teamRoom.getAgentState(agent.name) || { state: 'idle', activeTaskId: null };
         return {
           ...agent,
-          provider_status: providerAvailable.get(agent.provider) ? 'connected' : 'disconnected',
+          provider_status: providerAvailable.get(agent.provider) ? 'cli_detected' : 'disconnected',
           active_provider: providerAvailable.get(agent.provider) ? agent.provider
             : agent.backup_provider && providerAvailable.get(agent.backup_provider) ? agent.backup_provider : null,
           station: station ? station.grid_position : null,
@@ -618,6 +628,9 @@ class SupervisorServer {
         const input = resolveInput(payload.command || payload.instruction, payload.mode);
         if (!this.takeoverController.validateToken(agentId, payload.takeover_token)) {
           throw Object.assign(new Error('Valid takeover token required'), { statusCode: 403, code: 'INVALID_TAKEOVER_TOKEN' });
+        }
+        if (input.mode === 'chat' && this.agentTerminals.has(agentId)) {
+          throw Object.assign(new Error('Agent CLI is active; use its terminal instead of starting a parallel headless turn'), { statusCode: 409, code: 'AGENT_CLI_ACTIVE' });
         }
         if (!input.text) throw Object.assign(new Error('Input is required'), { statusCode: 400 });
 

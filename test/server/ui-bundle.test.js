@@ -36,6 +36,7 @@ test('SupervisorServer serves interactive Web UI dashboard bundle', async (t) =>
     assert.ok(html.includes('data-input-mode="agent_tui"'));
     assert.ok(html.includes('takeover-terminal-emulator'));
     assert.ok(html.includes('terminal-mobile-keys'));
+    assert.ok(html.includes('agent-terminal-alert'));
     assert.ok(html.includes('remote-http-warning'));
     assert.ok(html.includes('data-input-mode="shell"'));
     assert.ok(html.includes('team-room-grid'));
@@ -71,6 +72,7 @@ test('SupervisorServer serves interactive Web UI dashboard bundle', async (t) =>
     assert.ok(js.includes('theme-toggle-btn'));
     assert.ok(js.includes("let inputMode = 'agent_tui'"));
     assert.ok(js.includes('terminalInstance.onData(sendTerminalInput)'));
+    assert.ok(js.includes('screenReaderMode: true'));
     assert.ok(js.includes('mode: inputMode'));
   });
 

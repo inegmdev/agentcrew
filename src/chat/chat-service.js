@@ -6,6 +6,19 @@ const { GeminiAdapter } = require('../providers/gemini-adapter');
 const { PtyManager } = require('../session/pty-manager');
 const { DEFAULT_ROSTER } = require('../workspace/manager');
 
+function quotaResetAt(message, now = Date.now()) {
+  const text = String(message || '');
+  const match = text.match(/(?:reset(?:s)?|retry(?:\s+after)?|available\s+in)\D{0,20}(\d+(?:\.\d+)?)\s*(seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h)\b/i);
+  if (!match) return null;
+  const unit = match[2].toLowerCase();
+  const multiplier = /^(?:h|hour|hr)/.test(unit) ? 3600000 : /^(?:m|min)/.test(unit) ? 60000 : 1000;
+  return new Date(now + Number(match[1]) * multiplier).toISOString();
+}
+
+function isQuotaError(message) {
+  return /\b429\b|resource_exhausted|rate.?limit|quota/i.test(String(message || ''));
+}
+
 /**
  * Role contracts defined in PRD §6 (PRD-TEAM-03).
  */
@@ -65,12 +78,37 @@ class ChatService {
       : Boolean(process.env.AGENTCREW_LIVE_PROVIDERS);
     this.sessionCache = new Map();
     this.activeTurns = new Map();
+    this.quotaLimits = new Map();
 
     this.adapters = {
       agy: opts.adapters?.agy || new AgyAdapter(),
       codex: opts.adapters?.codex || new CodexAdapter(),
       gemini: opts.adapters?.gemini || new GeminiAdapter(),
     };
+  }
+
+  async probeProviders() {
+    const reports = await Promise.all(Object.entries(this.adapters).map(async ([id, adapter]) => {
+      let report;
+      try {
+        report = await adapter.probe({ which: this.which });
+      } catch (error) {
+        report = { id, available: false, capabilities: [], reason: error.message };
+      }
+      const quota = this.quotaLimits.get(id);
+      if (quota?.resetAt && Date.parse(quota.resetAt) <= Date.now()) this.quotaLimits.delete(id);
+      const activeQuota = this.quotaLimits.get(id);
+      const available = Boolean(report.available);
+      return {
+        name: id,
+        status: !available ? 'unavailable' : activeQuota ? 'quota_limited' : 'available',
+        available: available && !activeQuota,
+        capabilities: report.capabilities || [],
+        reason: !available ? report.reason || null : activeQuota?.reason || null,
+        reset_at: available ? activeQuota?.resetAt || null : null,
+      };
+    }));
+    return reports;
   }
 
   async getAgentSession(agentId) {
@@ -197,8 +235,13 @@ class ChatService {
       const existingSession = await this.getAgentSession(agent.name);
 
       // Order providers: agent's assigned provider first, followed by others
-      const order = [agent.provider, 'agy', 'codex']
-        .filter((p, i, a) => this.adapters[p] && a.indexOf(p) === i && this.which(p));
+      const order = [agent.provider, 'agy', 'codex', 'gemini']
+        .filter((p, i, a) => {
+          const quota = this.quotaLimits.get(p);
+          if (quota?.resetAt && Date.parse(quota.resetAt) <= Date.now()) this.quotaLimits.delete(p);
+          const stillLimited = quota && (!quota.resetAt || Date.parse(quota.resetAt) > Date.now());
+          return this.adapters[p] && a.indexOf(p) === i && this.which(p) && !stillLimited;
+        });
 
       const errors = [];
 
@@ -267,7 +310,7 @@ class ChatService {
             }
 
             if (text && !result.timedOut && result.code === 0) {
-              return `${label}: ${text}`;
+              return `${label} [provider: ${name}]: ${text}`;
             }
           } else if (name === 'codex') {
             const finalArgs = [...spawnArgs, promptInstructions];
@@ -327,7 +370,23 @@ class ChatService {
             }
 
             if (answerText && !result.timedOut && result.code === 0) {
-              return `${label}: ${answerText}`;
+              return `${label} [provider: ${name}]: ${answerText}`;
+            }
+          } else if (name === 'gemini') {
+            const finalArgs = [...spawnArgs, promptInstructions];
+            result = await this.ptyManager.executeCommand(adapter.command || 'gemini', finalArgs, {
+              cwd: this.repoPath,
+              timeoutMs: 60000,
+            });
+            let answerText = '';
+            for (const line of (result.stdout || '').split('\n')) {
+              const event = adapter.parseStreamEvent(line);
+              if (event?.type === 'message' && event.content) answerText = event.content;
+              if (event?.type === 'result' && event.response) answerText = event.response;
+            }
+            if (!answerText) answerText = (result.stdout || '').trim();
+            if (answerText && !result.timedOut && result.code === 0) {
+              return `${label} [provider: ${name}]: ${answerText}`;
             }
           }
 
@@ -335,6 +394,13 @@ class ChatService {
             ? 'timed out'
             : ((result?.stderr || '').split('\n')[0] || `exit ${result?.code}`);
           errors.push(`${name}: ${why}`);
+          if (isQuotaError(`${result?.stderr || ''} ${result?.stdout || ''}`)) {
+            const detail = `${result?.stderr || ''} ${result?.stdout || ''}`.trim();
+            this.quotaLimits.set(name, {
+              reason: 'Provider quota or rate limit reached',
+              resetAt: quotaResetAt(detail),
+            });
+          }
         } catch (e) {
           errors.push(`${name}: ${e.message}`);
         }

@@ -11,6 +11,13 @@ test('GeminiAdapter probe identifies availability and declares required capabili
   assert.ok(report.capabilities.includes('disable_native_delegation'));
 });
 
+test('GeminiAdapter probe reports missing runner as unavailable', async () => {
+  const adapter = new GeminiAdapter({ command: 'gemini' });
+  const report = await adapter.probe({ which: () => false });
+  assert.equal(report.available, false);
+  assert.match(report.reason, /not found on PATH/);
+});
+
 test('GeminiAdapter builds spawn arguments disabling unmanaged delegation', () => {
   const adapter = new GeminiAdapter({ command: 'gemini' });
   const argv = adapter.buildSpawnArgs({

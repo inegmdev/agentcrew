@@ -463,6 +463,9 @@ equivalent keyboard/list navigation, reduced motion, and text labels for state.
 questions, permissions, interruptions, and handoffs in order. Show provider/model,
 configuration revision, ownership, and transcript completeness. Artifact views show
 revision diffs and source links. Large logs open separately instead of flooding chat.
+Chat replies identify the provider that actually answered, including after failover.
+Provider health distinguishes available, unavailable, and quota-limited runners and
+shows a known quota reset time.
 
 **PRD-UI-05 — Empty and failure states.** A new project directs the operator to
 setup/import. Unconfigured providers show requirements, not fake availability.

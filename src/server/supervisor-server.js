@@ -261,16 +261,17 @@ class SupervisorServer {
       const readiness = this.workspace && this.projectId
         ? await this.workspace.checkReadiness(this.projectId)
         : { databaseReady: true, rosterCount: 13 };
-      const qualified = readiness.configuredProviders || ['agy', 'codex', 'gemini'];
+      const providers = await this.chatService.probeProviders();
+      const agents = this.workspace && this.projectId ? await this.workspace.listAgents(this.projectId) : [];
+      for (const provider of providers) {
+        provider.agents = agents.filter((agent) => agent.provider === provider.name).map((agent) => agent.name);
+      }
+      const qualified = providers.filter((provider) => provider.available).map((provider) => provider.name);
       return this.jsonResponse(res, 200, {
         status: 'ready',
         readiness,
         qualified_providers: qualified,
-        providers: [
-          { name: 'agy', status: 'ready', features: ['stream-json', 'permission-hooks'] },
-          { name: 'codex', status: 'ready', features: ['jsonl', 'non-interactive'] },
-          { name: 'gemini', status: 'ready', features: ['stream-json', 'headless'] }
-        ]
+        providers
       });
     }
 

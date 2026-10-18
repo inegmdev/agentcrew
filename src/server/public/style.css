@@ -2069,6 +2069,12 @@ select:focus, input.search-input:focus, textarea:focus {
   color: var(--accent-green);
 }
 
+.badge-warning {
+  color: var(--warning, #9a6700);
+  background: color-mix(in srgb, var(--warning, #d29922) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warning, #d29922) 35%, transparent);
+}
+
 /* Responsive dashboard composition */
 @media (max-width: 1180px) {
   .kpi-grid {

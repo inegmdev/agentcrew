@@ -946,11 +946,16 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = await res.json();
       if (!providerBadges) return;
       providerBadges.innerHTML = '';
-      const list = data.qualified_providers || (data.readiness && data.readiness.configuredProviders) || (data.providers ? data.providers.map(p => p.name) : []);
+      const list = data.providers || [];
       list.forEach(p => {
         const badge = document.createElement('span');
-        badge.className = 'badge badge-success';
-        badge.textContent = `Provider ${p}: Qualified (0 credentials)`;
+        const statusLabel = p.status === 'available' ? 'Available'
+          : p.status === 'quota_limited' ? 'Quota limited' : 'Unavailable';
+        badge.className = `badge ${p.status === 'available' ? 'badge-success' : 'badge-warning'}`;
+        const reset = p.reset_at ? ` · resets ${new Date(p.reset_at).toLocaleTimeString()}` : '';
+        badge.textContent = `Provider ${p.name}: ${statusLabel}${reset}`;
+        const affectedAgents = p.agents?.length ? ` Assigned agents: ${p.agents.join(', ')}.` : '';
+        badge.title = `${p.reason || `${p.name} runner detected`}${affectedAgents}`;
         providerBadges.appendChild(badge);
       });
     } catch (err) {
@@ -990,6 +995,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     sse.addEventListener('agent_answered', (e) => {
       const data = JSON.parse(e.data);
+      loadReadiness();
       if (pixelRenderer && data.agent_id) {
         const bubblePreview = data.answer.replace(/\[\d+m/g, '').replace(/[\r\n]+/g, ' ').slice(0, 28);
         pixelRenderer.showSpeechBubble(data.agent_id, bubblePreview, 5000);

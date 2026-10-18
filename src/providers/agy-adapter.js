@@ -13,12 +13,14 @@ class AgyAdapter {
     };
   }
 
-  async probe() {
-    const isPresent = Boolean(which(this.command));
+  async probe(context = {}) {
+    const resolve = context.which || which;
+    const isPresent = Boolean(resolve(this.command));
     return {
       id: 'agy',
       contract_version: 1,
       available: isPresent,
+      reason: isPresent ? null : `Runner '${this.command}' was not found on PATH`,
       capabilities: [
         'stream_messages',
         'send_followup',

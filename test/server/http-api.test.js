@@ -78,11 +78,18 @@ test('SupervisorServer serves TRD §12 API routes and SSE stream', async (t) => 
   });
 
   await t.test('GET /api/v1/readiness reports qualified provider status', async () => {
+    server.chatService.adapters.gemini.probe = async () => ({
+      id: 'gemini', available: false, reason: "Runner 'gemini' was not found on PATH", capabilities: [],
+    });
     const res = await fetch(`${baseUrl}/api/v1/readiness`);
     assert.equal(res.status, 200);
     const data = await res.json();
     assert.equal(data.status, 'ready');
     assert.ok(Array.isArray(data.providers));
+    assert.deepEqual(data.providers.map(provider => provider.name).sort(), ['agy', 'codex', 'gemini']);
+    assert.ok(data.providers.every(provider => ['available', 'unavailable', 'quota_limited'].includes(provider.status)));
+    assert.equal(data.providers.find(provider => provider.name === 'gemini').status, 'unavailable');
+    assert.deepEqual(data.providers.find(provider => provider.name === 'gemini').agents, ['QA-1', 'QA-2']);
   });
 
   await t.test('GET /api/v1/agents returns all 13 agent identities with status badges', async () => {

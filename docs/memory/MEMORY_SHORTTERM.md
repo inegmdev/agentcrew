@@ -299,3 +299,9 @@ TASK-33 adds explicit Chat/Shell input routing in the Takeover Console. Chat is 
 default; `!` forces one shell command. A shared `src/session/input-mode.js` resolver
 serves WebSocket and HTTP session execution, and the server requires `human_owned`
 before shell execution. PRD/TRD, UI, and routing/ownership tests updated.
+
+TASK-34: readiness calls each provider adapter probe; reports distinguish
+available, unavailable, and quota-limited, include a known reset time and
+assigned agents, and the UI renders those states. Chat replies identify the
+provider that answered, including after failover. Gemini has a one-shot runner
+and is explicitly unavailable when its CLI is absent.

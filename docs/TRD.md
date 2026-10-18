@@ -882,6 +882,16 @@ memory.decide, diagnostic.request/decide, integration.request_merge.
 Each has its own schema and authorization predicate; arbitrary tool execution is
 not exposed as a generic unauthenticated endpoint.
 
+`GET /readiness` probes each adapter at request time. Its `providers`
+array uses `{ name, status, available, capabilities, reason, reset_at, agents }`, where
+`status` is `available`, `unavailable`, or `quota_limited`; `reset_at` is an ISO
+timestamp when the CLI error includes a parseable retry duration, otherwise null.
+`qualified_providers` remains a compatibility list of currently available
+providers. An optional provider without an installed runner is explicitly
+`unavailable`; `agents` lists roster members assigned to that provider. It does
+not make the workspace core readiness fail. Adapter probes confirm that the CLI
+runner is on PATH; they do not make an authenticated or billable provider request.
+
 Return validation errors (400/422), unauthorized (401), forbidden action (403), missing
 entity (404), stale revision/idempotency conflict (409), overload (429), or unavailable
 dependency (503). Include stable machine code, safe message, field details, current

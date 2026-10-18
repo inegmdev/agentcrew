@@ -117,6 +117,67 @@ test('ChatService fails over to next available provider if primary fails', async
   assert.ok(callLog.includes('agy'), 'Must attempt agy first');
   assert.ok(callLog.includes('codex'), 'Must failover to codex');
   assert.ok(reply.includes('Codex answers'), `Reply must contain failover text: ${reply}`);
+  assert.ok(reply.includes('[provider: codex]'), `Reply must identify the responding provider: ${reply}`);
+  assert.equal((await service.probeProviders()).find((p) => p.name === 'agy').status, 'quota_limited');
+});
+
+test('ChatService probes adapters and reports missing Gemini explicitly', async () => {
+  const probed = [];
+  const makeAdapter = (id, available) => ({
+    async probe() { probed.push(id); return { id, available, capabilities: [] }; },
+  });
+  const service = new ChatService({
+    adapters: {
+      agy: makeAdapter('agy', true),
+      codex: makeAdapter('codex', true),
+      gemini: makeAdapter('gemini', false),
+    },
+    which: () => true,
+  });
+  const reports = await service.probeProviders();
+  assert.deepEqual(probed.sort(), ['agy', 'codex', 'gemini']);
+  assert.equal(reports.find((provider) => provider.name === 'gemini').status, 'unavailable');
+  assert.equal(reports.find((provider) => provider.name === 'gemini').available, false);
+});
+
+test('ChatService records quota reset hints from provider errors', async () => {
+  const service = new ChatService({
+    liveProviders: true,
+    adapters: { agy: new AgyAdapter() },
+    ptyManager: {
+      async execute() { return { stdout: '', stderr: 'RESOURCE_EXHAUSTED (429), resets in 9 minutes', code: 1 }; },
+      async executeCommand() { return { stdout: '', stderr: 'RESOURCE_EXHAUSTED (429), resets in 9 minutes', code: 1 }; },
+    },
+    which: (bin) => bin === 'agy',
+  });
+  await service.generateResponse('Alice', 'Hello');
+  const agy = (await service.probeProviders()).find((provider) => provider.name === 'agy');
+  assert.equal(agy.status, 'quota_limited');
+  assert.ok(Date.parse(agy.reset_at) > Date.now());
+});
+
+test('ChatService runs Gemini-backed agents through the Gemini adapter', async () => {
+  let invoked = false;
+  const gemini = {
+    command: 'gemini',
+    buildSpawnArgs: () => ['-p', '--output-format', 'stream-json'],
+    parseStreamEvent: (line) => JSON.parse(line),
+  };
+  const service = new ChatService({
+    liveProviders: true,
+    adapters: { gemini },
+    which: (bin) => bin === 'gemini',
+    ptyManager: {
+      async execute() { return { stdout: '', code: 0 }; },
+      async executeCommand(binary, args) {
+        invoked = binary === 'gemini' && args.includes('--output-format');
+        return { stdout: '{"type":"message","role":"assistant","content":"Gemini response"}', stderr: '', code: 0 };
+      },
+    },
+  });
+  const response = await service.generateResponse('QA-1', 'Review this change');
+  assert.equal(invoked, true);
+  assert.match(response, /\[provider: gemini\].*Gemini response/);
 });
 
 test('ChatService includes review context in provider prompt and throws when all providers fail', async () => {

@@ -281,3 +281,57 @@ a selected-agent workspace, session output, takeover controls, and prompt
 composer. Kept the isometric map available as a secondary view. Connected roster
 status and takeover ownership to the live agent API, used local initials instead
 of remote avatar images, and checked desktop and phone layouts with Playwright.
+
+## 2026-10-18
+
+Implemented TASK-31 on `feat/task-31`: Code Review `agent.ask` obtains selected
+PR metadata and diff from `gh`, supplies them to the provider-backed ChatService,
+and surfaces GitHub/provider failures without generating fallback review text.
+Drawer renders returned text safely. Added API/provider-path, provider-error,
+ChatService context/error, and live PR-context tests. TRD §12 documents behavior.
+
+TASK-36 makes `agentcrew server` bind to `127.0.0.1` by default; `--host` is
+required for LAN binding. README documents LAN and email-protected Cloudflare Quick
+Tunnel access, and the repository convention requires PRs for `main`. Added a
+Linux pull-request workflow that runs `npm test`.
+
+TASK-33 adds explicit Chat/Shell input routing in the Takeover Console. Chat is the
+default; `!` forces one shell command. A shared `src/session/input-mode.js` resolver
+serves WebSocket and HTTP session execution, and the server requires `human_owned`
+before shell execution. PRD/TRD, UI, and routing/ownership tests updated.
+
+TASK-34: readiness calls each provider adapter probe; reports distinguish
+available, unavailable, and quota-limited, include a known reset time and
+assigned agents, and the UI renders those states. Chat replies identify the
+provider that answered, including after failover. Gemini remains explicitly
+unavailable even when installed: the required roster-only delegation guard is
+not verified in the official CLI contract. Assigned unavailable providers block
+readiness; binary detection is not recorded as qualification.
+
+TASK-35 adds incremental provider stdout callbacks through `PtyManager` and
+`ChatService`, PTY WebSocket chat turn frames, and SSE room-thinking lifecycle
+events. Thinking cleanup is idempotent across completion, failure/timeout, and
+socket close. Provider output is line-normalized; exact delta event shapes remain
+provider-dependent. The frame contract and UI behavior are recorded in PRD/TRD.
+Cross-task review hardened same-origin/JSON command handling, prevented release
+while a human chat turn remains active, and fixed a WebSocket mode-switch race.
+
+Follow-up after mobile testing: QA-1/QA-2 remained Gemini-assigned despite no
+qualified Gemini CLI, because ChatService silently fell back to agy; metadata-only
+agy JSON was also displayed as chat. Replaced implicit routing with strict primary
+and persisted opt-in per-agent backup provider/model. Native conversations are now
+stored per provider. The browser takeover surface defaults to an interactive
+node-pty/xterm CLI terminal with keystrokes, resize, mobile keys, and same-tab PTY
+reattachment; Shell remains separate. Existing native IDs resume in a new process;
+fresh TUI conversations are marked new and not claimed as resumable. Server startup
+reuses the workspace database to preserve settings. Non-loopback HTTP remains an
+explicit, unauthenticated short-lived test mode with a prominent warning.
+Two-axis review corrected stale README routing prose and premature resume wording,
+added Linux process-group exit confirmation, Windows fake takeover/WebSocket CI,
+and prevented a parallel headless turn while an agent TUI is active. A newly
+interactive conversation still lacks a reliable provider-native ID for later
+resume; the limitation is explicit rather than silently claiming continuity.
+Independent mobile UI review fixed hidden connection errors, stale Connected state,
+xterm screen-reader mode, 44px touch keys, and the Ctrl-key latch. Browser smoke
+confirmed a missing Gemini agent shows a visible unavailable reason and a fake
+Codex PTY survives same-tab refresh, accepts input, and releases cleanly.

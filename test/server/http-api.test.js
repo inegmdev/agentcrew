@@ -33,6 +33,39 @@ test('SupervisorServer serves TRD §12 API routes and SSE stream', async (t) => 
     staticDir: path.join(__dirname, 'fixtures'),
     liveProviders: false
   });
+  let providerFailure = false;
+  let capturedReview = null;
+  server.liveProviders = true;
+  server.repoDataService.getPullRequestReviewContext = async (number) => ({
+    number,
+    title: 'Live provider review title',
+    author: 'review-author',
+    body: 'PR description from GitHub',
+    baseBranch: 'main',
+    headBranch: 'feature/review',
+    diff: 'diff --git a/src/example.js b/src/example.js\n+const reviewed = true;',
+    diffTruncated: false
+  });
+  server.chatService = {
+    resolveAgent: (agentId) => server.workspace.listAgents(server.projectId).then((agents) => {
+      const match = agents.find((agent) => agent.name.toLowerCase() === agentId.toLowerCase());
+      return { name: match?.name || agentId };
+    }),
+    async quiesceAgent() { return { quiescent: true }; },
+    resumeAgent() {},
+    async probeProviders() {
+      return [
+        { name: 'agy', status: 'available', available: true, capabilities: [] },
+        { name: 'codex', status: 'available', available: true, capabilities: [] },
+        { name: 'gemini', status: 'unavailable', available: false, capabilities: [], reason: "Runner 'gemini' was not found on PATH" },
+      ];
+    },
+    async generateResponse(agentId, prompt, options) {
+      capturedReview = { agentId, prompt, options };
+      if (providerFailure) throw new Error('codex: quota exceeded');
+      return '[Arthur (Architect)]: Provider reviewed the supplied diff.';
+    }
+  };
 
   await server.start();
   const address = server.httpServer.address();
@@ -51,12 +84,31 @@ test('SupervisorServer serves TRD §12 API routes and SSE stream', async (t) => 
     assert.equal(data.agents.length, 13);
   });
 
+  await t.test('command API rejects cross-origin and non-JSON browser requests', async () => {
+    const body = JSON.stringify({ command_type: 'session.takeover', payload: { agent_id: 'Dev-1' } });
+    const crossOrigin = await fetch(`${baseUrl}/api/v1/commands`, {
+      method: 'POST', headers: { Origin: 'https://attacker.example', 'Content-Type': 'application/json' }, body
+    });
+    assert.equal(crossOrigin.status, 403);
+    assert.equal(crossOrigin.headers.get('access-control-allow-origin'), null);
+    const plainText = await fetch(`${baseUrl}/api/v1/commands`, {
+      method: 'POST', headers: { 'Content-Type': 'text/plain' }, body
+    });
+    assert.equal(plainText.status, 415);
+    assert.equal(takeover.getState('Dev-1'), 'auto');
+  });
+
   await t.test('GET /api/v1/readiness reports qualified provider status', async () => {
     const res = await fetch(`${baseUrl}/api/v1/readiness`);
     assert.equal(res.status, 200);
     const data = await res.json();
-    assert.equal(data.status, 'ready');
+    assert.equal(data.status, 'blocked');
+    assert.deepEqual(data.qualified_providers, []);
     assert.ok(Array.isArray(data.providers));
+    assert.deepEqual(data.providers.map(provider => provider.name).sort(), ['agy', 'codex', 'gemini']);
+    assert.ok(data.providers.every(provider => ['available', 'unavailable', 'quota_limited'].includes(provider.status)));
+    assert.equal(data.providers.find(provider => provider.name === 'gemini').status, 'unavailable');
+    assert.deepEqual(data.providers.find(provider => provider.name === 'gemini').agents, ['QA-1', 'QA-2']);
   });
 
   await t.test('GET /api/v1/agents returns all 13 agent identities with status badges', async () => {
@@ -67,6 +119,22 @@ test('SupervisorServer serves TRD §12 API routes and SSE stream', async (t) => 
     const dev1 = data.agents.find(a => a.name === 'Dev-1');
     assert.ok(dev1);
     assert.equal(dev1.role, 'Developer');
+    const qa1 = data.agents.find(a => a.name === 'QA-1');
+    assert.equal(qa1.provider_status, 'disconnected');
+    assert.equal(qa1.active_provider, null);
+  });
+
+  await t.test('provider backup is opt-in and saved on the selected agent', async () => {
+    const response = await fetch(`${baseUrl}/api/v1/commands`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command_type: 'agent.provider_config', payload: {
+        agent_id: 'QA-1', backup_provider: 'codex', backup_model: 'o3',
+      } }),
+    });
+    assert.equal(response.status, 200);
+    const qa1 = (await (await fetch(`${baseUrl}/api/v1/agents`)).json()).agents.find(a => a.name === 'QA-1');
+    assert.equal(qa1.backup_provider, 'codex');
+    assert.equal(qa1.backup_model, 'o3');
   });
 
   await t.test('POST /api/v1/commands executes takeover and release cycle', async () => {
@@ -83,8 +151,72 @@ test('SupervisorServer serves TRD §12 API routes and SSE stream', async (t) => 
     assert.equal(takeoverRes.status, 200);
     const takeoverData = await takeoverRes.json();
     assert.equal(takeoverData.status, 'acknowledged');
-    assert.equal(takeoverData.result.agent_id, 'dev-1');
+    assert.equal(takeoverData.result.agent_id, 'Dev-1');
     assert.equal(takeoverData.result.state, 'human_owned');
+    const token = takeoverData.result.takeover_token;
+
+    const conflictRes = await fetch(`${baseUrl}/api/v1/commands`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command_type: 'session.takeover', payload: { agent_id: 'dev-1' } })
+    });
+    assert.equal(conflictRes.status, 409, 'a second tab cannot take the same agent');
+
+    const invalidChatRes = await fetch(`${baseUrl}/api/v1/commands`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command_type: 'session.exec', payload: { agent_id: 'dev-1', command: 'hello', mode: 'chat', takeover_token: 'wrong' } })
+    });
+    assert.equal(invalidChatRes.status, 403);
+
+    const validChatRes = await fetch(`${baseUrl}/api/v1/commands`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command_type: 'session.exec', payload: { agent_id: 'dev-1', command: 'hello', mode: 'chat', takeover_token: token } })
+    });
+    assert.equal(validChatRes.status, 200, 'human chat is allowed during an agent hold');
+
+    let finishChat;
+    let markStarted;
+    const started = new Promise((resolve) => { markStarted = resolve; });
+    const previousGenerate = server.chatService.generateResponse;
+    server.chatService.generateResponse = async () => {
+      markStarted();
+      return new Promise((resolve) => { finishChat = resolve; });
+    };
+    const pendingChat = fetch(`${baseUrl}/api/v1/commands`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command_type: 'session.exec', payload: { agent_id: 'dev-1', command: 'long answer', mode: 'chat', takeover_token: token } })
+    });
+    await started;
+    const prematureRelease = await fetch(`${baseUrl}/api/v1/commands`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command_type: 'session.release', payload: { agent_id: 'dev-1', takeover_token: token } })
+    });
+    assert.equal(prematureRelease.status, 409);
+    assert.equal(takeover.getState('Dev-1'), 'human_owned');
+    finishChat('done');
+    assert.equal((await pendingChat).status, 200);
+    server.chatService.generateResponse = previousGenerate;
+
+    let finishShell;
+    let markShellStarted;
+    const shellStarted = new Promise((resolve) => { markShellStarted = resolve; });
+    const previousExecute = server.ptyManager.execute;
+    server.ptyManager.execute = async () => {
+      markShellStarted();
+      return new Promise((resolve) => { finishShell = resolve; });
+    };
+    const pendingShell = fetch(`${baseUrl}/api/v1/commands`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command_type: 'session.exec', payload: { agent_id: 'dev-1', command: 'pwd', mode: 'shell', takeover_token: token } })
+    });
+    await shellStarted;
+    const releaseDuringShell = await fetch(`${baseUrl}/api/v1/commands`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command_type: 'session.release', payload: { agent_id: 'dev-1', takeover_token: token } })
+    });
+    assert.equal(releaseDuringShell.status, 409);
+    finishShell({ stdout: '/repo', stderr: '', code: 0 });
+    assert.equal((await pendingShell).status, 200);
+    server.ptyManager.execute = previousExecute;
 
     // 2. Release Takeover
     const releaseRes = await fetch(`${baseUrl}/api/v1/commands`, {
@@ -92,7 +224,7 @@ test('SupervisorServer serves TRD §12 API routes and SSE stream', async (t) => 
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         command_type: 'session.release',
-        payload: { agent_id: 'dev-1', guidance_notes: 'Fixed typo in test assertion' },
+        payload: { agent_id: 'dev-1', takeover_token: token, guidance_notes: 'Fixed typo in test assertion' },
         idempotency_key: 'cmd-release-1'
       })
     });
@@ -126,7 +258,7 @@ test('SupervisorServer serves TRD §12 API routes and SSE stream', async (t) => 
     assert.equal(listData.popups.length, 1);
   });
 
-  await t.test('POST /api/v1/commands executes agent.ask and returns agent answer', async () => {
+  await t.test('agent.ask sends live PR context to the provider and returns its answer', async () => {
     const askRes = await fetch(`${baseUrl}/api/v1/commands`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -144,8 +276,31 @@ test('SupervisorServer serves TRD §12 API routes and SSE stream', async (t) => 
     assert.equal(askRes.status, 200);
     const askData = await askRes.json();
     assert.equal(askData.status, 'acknowledged');
-    assert.ok(askData.result.answer.includes('Architectural Assessment'));
+    assert.ok(askData.result.answer.includes('Provider reviewed'));
     assert.equal(askData.result.pr_number, 26);
+    assert.equal(askData.result.author, 'review-author');
+    assert.equal(capturedReview.agentId, 'Arthur (Architect)');
+    assert.match(capturedReview.prompt, /Live provider review title/);
+    assert.match(capturedReview.options.reviewContext, /review-author/);
+    assert.match(capturedReview.options.reviewContext, /diff --git a\/src\/example.js/);
+    assert.equal(capturedReview.options.throwOnProviderError, true);
+  });
+
+  await t.test('agent.ask returns provider failures instead of fabricated review text', async () => {
+    providerFailure = true;
+    const askRes = await fetch(`${baseUrl}/api/v1/commands`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        command_type: 'agent.ask',
+        payload: { pr_number: 26, question: 'What changed?' }
+      })
+    });
+    const askData = await askRes.json();
+    assert.equal(askRes.status, 500);
+    assert.match(askData.error, /quota exceeded/);
+    assert.equal(askData.result, undefined);
+    providerFailure = false;
   });
 
   await t.test('GET /api/v1/tasks returns backlog tasks array', async () => {

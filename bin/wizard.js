@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const { checkPrerequisites } = require('../src/steps/checkPrerequisites');
 const { detectAgents } = require('../src/steps/detectAgents');
 const { installBacklog } = require('../src/steps/installBacklog');
@@ -11,6 +12,7 @@ const { installSkills } = require('../src/steps/installSkills');
 const { startDaemon } = require('../src/daemon');
 const { consolidate } = require('../src/daemon/consolidate');
 const { SupervisorServer } = require('../src/server/supervisor-server');
+const { parseServerHost } = require('../src/server/options');
 const { WorkspaceManager } = require('../src/workspace/manager');
 const { TurnScheduler } = require('../src/scheduler/turn-scheduler');
 const { TakeoverController } = require('../src/session/takeover-controller');
@@ -116,17 +118,20 @@ function runConsolidate(projectPath) {
 
 async function runServer(portArg, extraArgs = []) {
   const port = parseInt(portArg, 10) || 3000;
+  const serverArgs = portArg && portArg.startsWith('--')
+    ? [portArg, ...extraArgs]
+    : extraArgs;
 
   let dir = path.join(process.env.HOME || '', '.agentcrew');
-  const dirIdx = extraArgs.indexOf('--dir');
-  if (dirIdx !== -1 && extraArgs[dirIdx + 1]) {
-    dir = path.resolve(extraArgs[dirIdx + 1]);
+  const dirIdx = serverArgs.indexOf('--dir');
+  if (dirIdx !== -1 && serverArgs[dirIdx + 1]) {
+    dir = path.resolve(serverArgs[dirIdx + 1]);
   }
 
   const workspace = new WorkspaceManager({ baseDir: dir });
   const repoPath = process.cwd();
 
-  const project = await workspace.initProject({
+  const project = await workspace.getOrInitProject({
     repoPath,
     name: path.basename(repoPath)
   });
@@ -134,13 +139,7 @@ async function runServer(portArg, extraArgs = []) {
   const scheduler = new TurnScheduler({ maxConcurrentTurns: 4 });
   const takeoverController = new TakeoverController({ softBudgetMs: 10000 });
 
-  let host = '0.0.0.0';
-  const hostIdx = extraArgs.indexOf('--host');
-  if (hostIdx !== -1 && extraArgs[hostIdx + 1]) {
-    host = extraArgs[hostIdx + 1];
-  } else if (process.env.HOST) {
-    host = process.env.HOST;
-  }
+  const host = parseServerHost(serverArgs);
 
   const server = new SupervisorServer({
     port,
@@ -156,8 +155,18 @@ async function runServer(portArg, extraArgs = []) {
   console.log(`\n=== agentcrew server: ${path.basename(repoPath)} ===`);
   console.log(`  Listening on http://${host}:${port}`);
   console.log(`  Local URL: http://127.0.0.1:${port}`);
+  if (!['127.0.0.1', '::1', 'localhost'].includes(host)) {
+    console.warn('  WARNING: Remote HTTP access is unauthenticated. Anyone who can reach this port can control agent CLIs and run shell commands.');
+    console.warn('  Use only on a network you trust; stop the server when testing is done.');
+  }
   if (host === '0.0.0.0') {
-    console.log(`  LAN URL:   http://192.168.100.50:${port}`);
+    for (const [name, addresses] of Object.entries(os.networkInterfaces())) {
+      for (const address of addresses || []) {
+        if (address.family === 'IPv4' && !address.internal) {
+          console.log(`  ${name}: http://${address.address}:${port}`);
+        }
+      }
+    }
   }
   console.log(`  Open in your browser to view the AI Team Workspace.`);
   console.log('  Press Ctrl-C to stop.\n');
@@ -229,7 +238,7 @@ async function main() {
         '  agentcrew update                    Re-run setup for every registered project\n' +
         '  agentcrew daemon [path]             Watch the board; journal and consolidate\n' +
         '  agentcrew consolidate [path]        Propose a distilled MEMORY.md now\n' +
-        '  agentcrew server [port]             Run AI Team Workspace HTTP/SSE supervisor\n' +
+        '  agentcrew server [port] [--host address] Run AI Team Workspace HTTP/SSE supervisor\n' +
         '  agentcrew iterate [goal]            Run automated 13-agent iteration cycle\n'
     );
   }

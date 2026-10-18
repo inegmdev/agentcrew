@@ -118,9 +118,58 @@ agentcrew server 3000
 Open **`http://127.0.0.1:3000`** in your browser to interact with:
 - **Virtual Team Room**: 4x4 isometric layout of 13 agent identities with real-time activity badges.
 - **Kanban Flow**: Live task lifecycle board tracking requirements through planning, development, architect review, and independent QA.
-- **Takeover Console**: Intervene in running agent sessions, inspect and authorize tools, and release back to autonomous scheduling with guidance notes.
+- **Takeover Console**: Control the assigned provider's interactive CLI in a real browser terminal (or use the separate Shell channel), then release back to autonomous scheduling.
 - **Observability Dashboard**: Cycle times, QA pass rates, and provider qualification readiness.
 - **Real-Time SSE Stream**: Automatic updates pushed over Server-Sent Events (`/api/v1/events`).
+
+#### Access from another device or through Cloudflare
+
+The server listens only on this computer by default. To allow devices on your
+trusted LAN to connect, bind all interfaces explicitly:
+
+```bash
+npm run server -- --host 0.0.0.0
+# or
+agentcrew server 3000 --host 0.0.0.0
+```
+
+**Warning:** binding to `0.0.0.0` exposes an unauthenticated command-capable
+dashboard over plain HTTP. Anyone who can reach the port can control the CLI
+and run commands as your user. This is suitable only for a short-lived test on
+a network whose access you control; it is not an internet-safe deployment.
+Binding to a Tailscale address limits reachability to that tailnet, but does not
+add application authentication. Stop the server when done.
+
+Agents use their configured CLI strictly. Missing/unqualified Gemini leaves
+Gemini-assigned agents disconnected by default. You can save one explicit backup
+CLI and model in the selected agent panel; fallback is labeled and uses its own
+native conversation (no cross-provider context transfer). The browser terminal
+resumes a saved native conversation in a new process. A new CLI conversation has
+no saved resume ID until a provider session ID is captured; the UI marks it new.
+Same-tab refresh reattaches to the running PTY. Releasing control stops the CLI.
+
+Use this computer's LAN address (for example,
+`http://192.168.100.50:3000`) from the other device. Allow TCP port 3000 in the
+computer's firewall only on the trusted private network.
+
+For temporary remote access, use a recent `cloudflared` with an email-protected
+Quick Tunnel. The dashboard can execute commands, so authorize only your own
+email address:
+
+```bash
+cloudflared tunnel --url http://127.0.0.1:3000 --allowed-mail you@example.com
+```
+
+Open the HTTPS URL printed by `cloudflared` and confirm the email challenge
+before using the dashboard. Quick Tunnel URLs are temporary; stop the tunnel
+when finished. Older `cloudflared` versions without `--allowed-mail` must not
+expose this server. Do not use `localtunnel` for this server.
+
+#### Repository changes
+
+Changes to `main` go through a pull request and its passing CI checks. Do not
+push commits directly to `main`; repository branch protection is managed in
+GitHub settings and is not changed by this project configuration.
 
 ---
 
@@ -177,12 +226,12 @@ sequenceDiagram
     Supervisor-->>Agent: Revalidate assignment & resume autonomous flow
 ```
 
-**How chat in the Takeover Console is routed today**
+**How takeover is routed today**
 
-- Shell-looking input (`ls`, `git`, `npm`, …) runs in the repo via an interactive `bash` over the `/api/v1/pty` WebSocket.
-- Anything else is a conversational message: the supervisor calls the agent's provider CLI (`agy --print` / `codex exec`) with a role prompt plus the repo's HEAD commit, failing over `agy` → `codex`.
-- If every provider fails, the chat shows the real error (e.g. `agy` quota 429) — never a canned reply.
-- Limits: each message is a one-shot call (no conversation memory, ~5–10 s latency) and agents do not yet use their own worktrees or tools. See backlog TASK-29..TASK-36.
+- Agent CLI opens the assigned provider's interactive TUI through a real PTY. Keystrokes, colors, cursor movement, and terminal resizing pass through the browser. A saved native conversation ID is passed to the CLI's resume command; the UI labels this as a resume request, and the operator should verify the CLI state.
+- Shell is a separate explicit mode. No command-looking text is silently redirected from the agent CLI to Shell.
+- An unavailable assigned provider leaves the agent disconnected. An operator may opt in to a specific per-agent backup CLI and model; the backup is labeled and starts/resumes its own conversation, without copying primary-provider context.
+- Headless provider replies show readable assistant text only. Metadata-only output is an error, not a JSON chat message. See backlog TASK-29..TASK-36.
 
 ---
 

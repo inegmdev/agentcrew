@@ -5,7 +5,6 @@ const net = require('node:net');
 const crypto = require('node:crypto');
 
 const { SupervisorServer } = require('../../src/server/supervisor-server');
-const { WebSocketConnection } = require('../../src/server/websocket');
 const { PtyManager } = require('../../src/session/pty-manager');
 
 test('PtyManager spawns interactive child session and writes stdin', async () => {
@@ -29,41 +28,50 @@ test('PtyManager spawns interactive child session and writes stdin', async () =>
   assert.equal(session.isAlive, false);
 });
 
-test('SupervisorServer upgrades /api/v1/pty into interactive WebSocket terminal', async () => {
-  const server = new SupervisorServer({ port: 3892 });
+test('SupervisorServer authorizes takeover token before spawning a shell PTY', async () => {
+  const server = new SupervisorServer({ port: 0 });
   await server.start();
+  const port = server.httpServer.address().port;
 
-  const key = crypto.randomBytes(16).toString('base64');
-  const socket = net.connect(3892, '127.0.0.1');
-
-  const upgradeHeaders = [
-    'GET /api/v1/pty?agent_id=Dev-1 HTTP/1.1',
-    'Host: 127.0.0.1:3892',
-    'Upgrade: websocket',
-    'Connection: Upgrade',
-    `Sec-WebSocket-Key: ${key}`,
-    'Sec-WebSocket-Version: 13',
-    '\r\n',
-  ].join('\r\n');
-
-  socket.write(upgradeHeaders);
-
-  const handshakePromise = new Promise((resolve, reject) => {
+  const requestUpgrade = (target) => new Promise((resolve, reject) => {
+    const socket = net.connect(port, '127.0.0.1');
+    const key = crypto.randomBytes(16).toString('base64');
+    socket.once('error', reject);
     socket.once('data', (chunk) => {
-      const resp = chunk.toString('utf8');
-      if (resp.includes('101 Switching Protocols') && resp.includes('Sec-WebSocket-Accept:')) {
-        resolve(true);
-      } else {
-        reject(new Error(`Handshake failed: ${resp}`));
-      }
+      resolve({ response: chunk.toString('utf8'), socket });
     });
+    socket.write([
+      `GET ${target} HTTP/1.1`, `Host: 127.0.0.1:${port}`, 'Upgrade: websocket',
+      'Connection: Upgrade', `Sec-WebSocket-Key: ${key}`, 'Sec-WebSocket-Version: 13', '\r\n',
+    ].join('\r\n'));
   });
 
-  const success = await handshakePromise;
-  assert.equal(success, true, 'Must return HTTP 101 Switching Protocols');
+  const denied = await requestUpgrade('/api/v1/pty?mode=shell&agent_id=Dev-1&token=invalid');
+  assert.match(denied.response, /403 Forbidden/);
+  assert.equal(server.ptyManager.activeSessions.size, 0, 'denied upgrades must not spawn a shell');
+  denied.socket.destroy();
 
-  socket.destroy();
+  const { token } = await server.takeoverController.requestTakeover('Dev-1');
+  const allowed = await requestUpgrade(`/api/v1/pty?mode=shell&agent_id=Dev-1&token=${encodeURIComponent(token)}`);
+  assert.match(allowed.response, /101 Switching Protocols/);
+  assert.equal(server.ptyManager.activeSessions.size, 1);
+  const release = await server.takeoverController.release({ agentId: 'Dev-1' });
+  assert.equal(release.state, 'auto');
+  allowed.socket.destroy();
   await server.stop();
+});
+
+test('PtyManager confirms an interrupted provider process group is quiescent', async () => {
+  const manager = new PtyManager();
+  const abort = new AbortController();
+  const childRun = manager.executeCommand(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+    timeoutMs: 10000,
+    signal: abort.signal,
+  });
+  setTimeout(() => abort.abort(), 50);
+  const result = await childRun;
+  assert.equal(result.interrupted, true);
+  assert.equal(result.quiescent, true);
 });
 
 test('SupervisorServer chatService generates persona responses for all agent roles', async () => {

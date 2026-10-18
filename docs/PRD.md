@@ -94,7 +94,7 @@ Direct REST/API execution adapters; Claude adapter qualification; remote or shar
 human workspaces; cross-repository iterations; PI events and portfolio planning;
 Jira and other source connectors; learned workload estimation; production/test
 environment provisioning; deployments and rollback automation; arbitrary workflow
-graph editing; room customization and elaborate animation; native terminal embedding.
+graph editing; room customization and elaborate animation.
 
 Future connectors must preserve local Markdown snapshots with provenance. They must
 not make agents repeatedly fetch ordinary planning context from remote MCP services.
@@ -354,9 +354,23 @@ created. Decisions affecting others become visible handoffs or change proposals.
 
 **PRD-CTRL-02 — Takeover.** Request takeover, display pausing, then grant exclusive
 human control after autonomous execution is stopped or safely reconciled. Human
-messages may drive the agent's tools under the effective permission policy. Handback
-records guidance and rechecks assignment validity. If safe takeover fails, show a
-blocked state; do not claim control while autonomous work continues.
+messages may drive the agent's tools under the effective permission policy. The
+Takeover Console offers an interactive native agent CLI terminal and a separate
+Shell mode; it defaults to the agent CLI. Shell execution requires human ownership.
+Handback records guidance and rechecks assignment validity. If safe takeover fails,
+show a blocked state; do not claim control while autonomous work continues.
+
+Takeover is scoped to one agent. Concurrent requests for that agent conflict. Only
+the acquiring tab's session token may attach to the agent terminal, release control,
+or open that agent's separate shell channel. Browser refresh in the same tab reattaches
+to the running PTY. A saved native conversation resumes in a new interactive process;
+if native resume is unavailable, the UI must say so rather than implying context
+survived. Shell access is an explicit mode.
+
+Provider routing is strict by default. An agent assigned to an unavailable or
+unqualified CLI is disconnected. The operator may persist one explicit per-agent
+backup provider and model; its use is labeled and its native conversation remains
+separate. Headless provider JSON metadata is not a chat answer.
 
 **PRD-CTRL-03 — Approval inbox.** Questions, permissions, reviews, merges, popup
 decisions, recovery uncertainty, and diagnostic proposals persist until resolved or
@@ -451,11 +465,17 @@ conversation/session controls. Provide the minimal isometric pixel-art office as
 secondary map view. Show named identities, role, provider/model, and real activity
 badges. Simple animation reflects real state; never invent meetings or work. Offer
 equivalent keyboard/list navigation, reduced motion, and text labels for state.
+During a chat turn, show a thinking state and reveal reply text as provider output
+arrives. Clear the activity state after success, failure, timeout, or disconnect.
 
 **PRD-UI-04 — Sessions and artifacts.** Display user/agent messages, tools, outcomes,
 questions, permissions, interruptions, and handoffs in order. Show provider/model,
 configuration revision, ownership, and transcript completeness. Artifact views show
 revision diffs and source links. Large logs open separately instead of flooding chat.
+Chat replies identify the provider that actually answered, including after an
+explicitly configured backup was used.
+Provider health distinguishes available, unavailable, and quota-limited runners and
+shows a known quota reset time.
 
 **PRD-UI-05 — Empty and failure states.** A new project directs the operator to
 setup/import. Unconfigured providers show requirements, not fake availability.

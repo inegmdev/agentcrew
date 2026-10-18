@@ -2,16 +2,24 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { GeminiAdapter } = require('../../src/providers/gemini-adapter');
 
-test('GeminiAdapter probe identifies availability and declares required capabilities', async () => {
+test('GeminiAdapter reports delegation control as unqualified even when installed', async () => {
   const adapter = new GeminiAdapter({ command: 'gemini' });
-  const report = await adapter.probe();
+  const report = await adapter.probe({ which: () => '/usr/bin/gemini' });
   assert.equal(report.id, 'gemini');
   assert.equal(report.contract_version, 1);
-  assert.ok(report.capabilities.includes('stream_messages'));
-  assert.ok(report.capabilities.includes('disable_native_delegation'));
+  assert.equal(report.available, false);
+  assert.match(report.reason, /delegation control is not qualified/);
+  assert.deepEqual(report.capabilities, []);
 });
 
-test('GeminiAdapter builds spawn arguments disabling unmanaged delegation', () => {
+test('GeminiAdapter probe reports missing runner as unavailable', async () => {
+  const adapter = new GeminiAdapter({ command: 'gemini' });
+  const report = await adapter.probe({ which: () => false });
+  assert.equal(report.available, false);
+  assert.match(report.reason, /not found on PATH/);
+});
+
+test('GeminiAdapter keeps headless arguments available for future qualification', () => {
   const adapter = new GeminiAdapter({ command: 'gemini' });
   const argv = adapter.buildSpawnArgs({
     cwd: '/tmp/workspace',
@@ -20,5 +28,5 @@ test('GeminiAdapter builds spawn arguments disabling unmanaged delegation', () =
   });
 
   assert.ok(argv.includes('--output-format') || argv.includes('-p'), 'Must run headless');
-  assert.ok(argv.includes('--no-subagents') || argv.includes('--disable-delegation'), 'Must enforce roster delegation');
+  assert.equal(argv.includes('--disable-delegation'), false);
 });

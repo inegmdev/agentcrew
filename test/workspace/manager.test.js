@@ -84,3 +84,23 @@ test('WorkspaceManager persists and retrieves agent provider session (TASK-29)',
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
+test('WorkspaceManager persists explicit backup settings and separate provider conversations', async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agentcrew-provider-config-'));
+  const manager = new WorkspaceManager({ baseDir: tmpDir });
+  const project = await manager.initProject({ repoPath: tmpDir, name: 'test' });
+  await manager.setAgentProviderConfig(project.id, 'QA-1', { backupProvider: 'codex', backupModel: 'o3' });
+  const qa = (await manager.listAgents(project.id)).find((agent) => agent.name === 'QA-1');
+  assert.equal(qa.backup_provider, 'codex');
+  assert.equal(qa.backup_model, 'o3');
+  await manager.saveAgentSession(project.id, 'QA-1', { provider: 'gemini', sessionId: 'gemini-1' });
+  await manager.saveAgentSession(project.id, 'QA-1', { provider: 'codex', sessionId: 'codex-1' });
+  assert.equal((await manager.getAgentSession(project.id, 'QA-1', 'gemini')).sessionId, 'gemini-1');
+  assert.equal((await manager.getAgentSession(project.id, 'QA-1', 'codex')).sessionId, 'codex-1');
+  await assert.rejects(manager.setAgentProviderConfig(project.id, 'QA-1', { backupProvider: 'gemini' }), /differ/);
+  await assert.rejects(manager.setAgentProviderConfig(project.id, 'QA-1', { backupProvider: 'codex', backupModel: 'bad model' }), /Invalid backup model/);
+  const restarted = new WorkspaceManager({ baseDir: tmpDir });
+  const sameProject = await restarted.getOrInitProject({ repoPath: tmpDir, name: 'test' });
+  assert.equal(sameProject.id, project.id);
+  assert.equal((await restarted.listAgents(project.id)).find((agent) => agent.name === 'QA-1').backup_provider, 'codex');
+});
+

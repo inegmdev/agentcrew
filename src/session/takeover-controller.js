@@ -1,50 +1,69 @@
-/**
- * State machine managing browser session takeover and human intervention (TRD §8).
- * States: auto -> pausing -> human_owned -> releasing -> auto
- */
+/** Per-agent takeover ownership. Ownership is granted only after quiescence is confirmed. */
 class TakeoverController {
   constructor(opts = {}) {
-    this.sessionId = opts.sessionId;
-    this.softBudgetMs = opts.softBudgetMs || 10000;
-    this.state = 'auto';
-    this.guidance = null;
+    this.softBudgetMs = opts.softBudgetMs ?? 10000;
+    this.quiesceAgent = opts.quiesceAgent || (async () => ({ quiescent: true }));
+    this.sessions = new Map();
   }
 
-  isAutonomousAllowed() {
-    return this.state === 'auto';
+  getState(agentId) {
+    return this.sessions.get(agentId)?.state || 'auto';
   }
 
-  async requestTakeover() {
-    this.state = 'pausing';
-
-    // Simulate waiting for turn quiescence within soft budget
-    await new Promise(resolve => setTimeout(resolve, Math.min(this.softBudgetMs, 20)));
-
-    this.state = 'human_owned';
-    return { status: 'acquired', state: this.state };
+  isAutonomousAllowed(agentId) {
+    return this.getState(agentId) === 'auto';
   }
 
-  evaluateToolCall({ source, toolName, input } = {}) {
-    if (this.state === 'human_owned') {
-      if (source === 'human') {
-        return { allowed: true, decidedBy: 'operator' };
-      }
-      return { allowed: false, reason: 'Session is currently owned by operator' };
+  validateToken(agentId, token) {
+    const session = this.sessions.get(agentId);
+    return Boolean(session && session.state === 'human_owned' && token && session.token === token);
+  }
+
+  async requestTakeover(agentId) {
+    if (!agentId) throw Object.assign(new Error('agent_id is required'), { statusCode: 400 });
+    const current = this.sessions.get(agentId);
+    if (current && current.state !== 'auto') {
+      throw Object.assign(new Error(`Agent ${agentId} is already ${current.state}`), { statusCode: 409, code: 'TAKEOVER_CONFLICT' });
     }
-    return { allowed: true, decidedBy: 'auto' };
+    const session = { state: 'pausing', token: require('node:crypto').randomUUID(), guidance: null };
+    this.sessions.set(agentId, session);
+    try {
+      let budgetTimer;
+      const result = await Promise.race([
+        this.quiesceAgent(agentId, { timeoutMs: this.softBudgetMs }),
+        new Promise((resolve) => { budgetTimer = setTimeout(() => resolve({ quiescent: false, reason: 'Takeover soft budget expired' }), this.softBudgetMs); }),
+      ]).finally(() => clearTimeout(budgetTimer));
+      if (!result?.quiescent) {
+        session.state = 'blocked';
+        session.reason = result?.reason || 'Quiescence could not be confirmed';
+        throw Object.assign(new Error(session.reason), { statusCode: 409, code: 'TAKEOVER_BLOCKED' });
+      }
+      session.state = 'human_owned';
+      return { status: 'acquired', state: session.state, token: session.token, agentId };
+    } catch (error) {
+      if (session.state === 'pausing') session.state = 'blocked';
+      throw error;
+    }
   }
 
-  async release({ guidance } = {}) {
-    this.state = 'releasing';
-    this.guidance = guidance || null;
+  evaluateToolCall({ agentId, source } = {}) {
+    const state = this.getState(agentId);
+    if (state !== 'auto') {
+      if (state === 'human_owned' && source === 'human') return { allowed: true, decidedBy: 'operator' };
+      return { allowed: false, reason: `Agent session is ${state}` };
+    }
+    return { allowed: source !== 'human', decidedBy: 'auto' };
+  }
 
-    // Transition back to auto
-    this.state = 'auto';
-    return {
-      status: 'released',
-      state: this.state,
-      guidance: this.guidance,
-    };
+  async release({ agentId, guidance } = {}) {
+    const session = this.sessions.get(agentId);
+    if (!session || session.state !== 'human_owned') {
+      throw Object.assign(new Error(`Agent ${agentId} is not human-owned`), { statusCode: 409, code: 'TAKEOVER_NOT_OWNED' });
+    }
+    session.state = 'releasing';
+    session.guidance = guidance || null;
+    this.sessions.delete(agentId);
+    return { status: 'released', state: 'auto', guidance: session.guidance, agentId };
   }
 }
 

@@ -13,12 +13,14 @@ class CodexAdapter {
     };
   }
 
-  async probe() {
-    const isPresent = Boolean(which(this.command));
+  async probe(context = {}) {
+    const resolve = context.which || which;
+    const isPresent = Boolean(resolve(this.command));
     return {
       id: 'codex',
       contract_version: 1,
       available: isPresent,
+      reason: isPresent ? null : `Runner '${this.command}' was not found on PATH`,
       capabilities: [
         'stream_messages',
         'send_followup',

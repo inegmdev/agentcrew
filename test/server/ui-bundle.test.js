@@ -33,6 +33,12 @@ test('SupervisorServer serves interactive Web UI dashboard bundle', async (t) =>
     assert.ok(html.includes('theme-toggle-btn'));
     assert.ok(html.includes('data-theme="light"'));
     assert.ok(html.includes('pixel-room-canvas'));
+    assert.ok(html.includes('data-input-mode="agent_tui"'));
+    assert.ok(html.includes('takeover-terminal-emulator'));
+    assert.ok(html.includes('terminal-mobile-keys'));
+    assert.ok(html.includes('agent-terminal-alert'));
+    assert.ok(html.includes('remote-http-warning'));
+    assert.ok(html.includes('data-input-mode="shell"'));
     assert.ok(html.includes('team-room-grid'));
     assert.ok(html.includes('kanban-board'));
     assert.ok(html.includes('view-overview'));
@@ -64,6 +70,10 @@ test('SupervisorServer serves interactive Web UI dashboard bundle', async (t) =>
     assert.ok(js.includes('/api/v1/workspace'));
     assert.ok(js.includes('agentcrew_theme'));
     assert.ok(js.includes('theme-toggle-btn'));
+    assert.ok(js.includes("let inputMode = 'agent_tui'"));
+    assert.ok(js.includes('terminalInstance.onData(sendTerminalInput)'));
+    assert.ok(js.includes('screenReaderMode: true'));
+    assert.ok(js.includes('mode: inputMode'));
   });
 
   await t.test('GET /style.css returns dashboard stylesheets with light and dark themes', async () => {
@@ -74,6 +84,14 @@ test('SupervisorServer serves interactive Web UI dashboard bundle', async (t) =>
     assert.ok(css.includes('[data-theme="light"]'));
     assert.ok(css.includes('[data-theme="dark"]'));
     assert.ok(css.includes('pr-details-dock'));
+  });
+
+  await t.test('GET /vendor assets serves the bundled terminal runtime locally', async () => {
+    for (const asset of ['/vendor/xterm.js', '/vendor/addon-fit.js', '/vendor/xterm.css']) {
+      const response = await fetch(`${baseUrl}${asset}`);
+      assert.equal(response.status, 200, asset);
+      assert.ok((await response.text()).length > 100, asset);
+    }
   });
 
   await t.test('GET /analytics-dashboard-data.js returns typed analytics data', async () => {

@@ -12,10 +12,21 @@ document.addEventListener('DOMContentLoaded', () => {
   const statusEl = document.getElementById('connection-status');
   const teamRoomGrid = document.getElementById('team-room-grid');
   const providerBadges = document.getElementById('provider-badges');
-  const terminal = document.getElementById('takeover-terminal');
+  const terminal = document.getElementById('takeover-terminal-log');
+  const terminalEmulator = document.getElementById('takeover-terminal-emulator');
+  const mobileKeys = document.getElementById('terminal-mobile-keys');
+  const terminalAlert = document.getElementById('agent-terminal-alert');
+  const backupFeedback = document.getElementById('agent-backup-feedback');
   const btnTakeover = document.getElementById('btn-takeover');
   const btnRelease = document.getElementById('btn-release');
   const agentSelect = document.getElementById('takeover-agent-select');
+  const takeoverTokens = new Map();
+  try {
+    Object.entries(JSON.parse(sessionStorage.getItem('agentcrew.takeoverTokens') || '{}')).forEach(([agent, token]) => takeoverTokens.set(agent, token));
+  } catch (_) {}
+  function persistTakeoverTokens() {
+    try { sessionStorage.setItem('agentcrew.takeoverTokens', JSON.stringify(Object.fromEntries(takeoverTokens))); } catch (_) {}
+  }
   const stateBadge = document.getElementById('takeover-state-badge');
   const agentSearchInput = document.getElementById('agent-search');
   const agentRosterCount = document.getElementById('agent-roster-count');
@@ -635,18 +646,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const data = await res.json();
       assistantShimmer.style.display = 'none';
-
-      let reply = '';
-      if (data.result && data.result.answer) {
-        reply = data.result.answer;
-      } else {
-        reply = `**[${targetAgent}]:** Analyzed PR #${selectedPR.number}. All checks and diff validations passed.`;
-      }
-
-      assistantAnswerText.innerHTML = reply.replace(/\n\n/g, '<br/><br/>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+      if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+      if (!data.result?.answer) throw new Error('Provider returned no review answer');
+      assistantAnswerText.textContent = data.result.answer;
+      assistantAnswerText.style.color = '';
     } catch (err) {
       assistantShimmer.style.display = 'none';
-      assistantAnswerText.innerHTML = `<span style="color: var(--danger);">Failed to query agent: ${err.message}</span>`;
+      assistantAnswerText.textContent = `Failed to query agent: ${err.message}`;
+      assistantAnswerText.style.color = 'var(--danger)';
     }
   }
 
@@ -710,6 +717,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const res = await fetch('/api/v1/workspace');
       const data = await res.json();
       log(`Workspace loaded: ${data.workspace.name} (${data.agents.length} agents)`);
+      const warning = document.getElementById('remote-http-warning');
+      if (warning) warning.hidden = !data.public_http_warning;
     } catch (err) {
       log(`Error loading workspace: ${err.message}`, 'action');
     }
@@ -723,6 +732,7 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   function getAgentStatus(agent) {
+    if (agent.provider_status === 'disconnected' && !agent.active_provider) return 'needs-you';
     const raw = String(agent.activity_badge || agent.state || 'idle').toLowerCase().replace(/[ _]+/g, '-');
     if (/takeover|human-owned|waiting|blocked|stuck|needs-input|needs-you/.test(raw)) return 'needs-you';
     if (/review|approval/.test(raw)) return 'review';
@@ -747,7 +757,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const statusEl = document.getElementById('selected-agent-status');
     const owned = isAgentHumanOwned(agent);
     const status = getAgentStatus(agent);
-    const statusLabel = owned ? 'Human owned' : agentStatusMeta[status].label;
+    const statusLabel = agent.provider_status === 'disconnected' && !agent.active_provider ? 'Disconnected'
+      : owned ? 'Human owned' : agentStatusMeta[status].label;
     const stateText = document.getElementById('agent-session-state');
 
     if (nameEl) nameEl.textContent = agent.name;
@@ -763,7 +774,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const roleEl = document.getElementById('selected-agent-role');
     if (roleEl) roleEl.textContent = agent.role || 'Agent';
     const providerEl = document.getElementById('selected-agent-provider');
-    if (providerEl) providerEl.textContent = String(agent.provider || 'Provider').toUpperCase();
+    if (providerEl) providerEl.textContent = String(agent.active_provider || agent.provider || 'Provider').toUpperCase();
+    const providerStatusEl = document.getElementById('selected-agent-provider-status');
+    if (providerStatusEl) providerStatusEl.textContent = agent.active_provider && agent.active_provider !== agent.provider
+      ? `Backup active · ${agent.provider} disconnected`
+      : agent.provider_status === 'disconnected' ? 'Disconnected · CLI unavailable' : 'CLI detected · sign-in unverified';
     const modelEl = document.getElementById('selected-agent-model');
     if (modelEl) modelEl.textContent = agent.model || '';
     const taskEl = document.getElementById('selected-agent-task');
@@ -773,19 +788,26 @@ document.addEventListener('DOMContentLoaded', () => {
     if (idEl) idEl.textContent = agent.id ? `ID ${String(agent.id).slice(0, 8)}` : '';
     const guidanceEl = document.getElementById('selected-agent-guidance');
     if (guidanceEl) guidanceEl.textContent = owned
-      ? 'You have control of this session. Send a prompt or run a command below.'
-      : 'Take over this session to send a prompt or run a command in the agent’s live terminal.';
+      ? 'You control the native CLI. Type in the terminal; Shell is separate.'
+      : 'Take over to open this agent’s CLI. Shell commands use a separate channel.';
     const captionEl = document.getElementById('agent-session-caption');
     if (captionEl) captionEl.textContent = owned
-      ? 'Connected to the selected agent’s live terminal.'
+      ? terminalReady ? 'Connected to the selected agent’s live terminal.' : 'Takeover acquired; connecting to the CLI…'
       : 'Live output appears here when a session is connected.';
     if (stateBadge) stateBadge.textContent = owned ? 'Human owned' : 'Auto';
     if (btnTakeover) btnTakeover.disabled = owned;
     if (btnRelease) btnRelease.disabled = !owned;
     if (cmdInput) cmdInput.disabled = !owned;
     if (btnSendCmd) btnSendCmd.disabled = !owned;
-    if (stateText) stateText.textContent = owned ? 'Connected' : statusLabel;
+    if (stateText) stateText.textContent = owned ? (terminalReady ? 'Connected' : 'Connecting') : statusLabel;
     if (agentSelect && agentSelect.value !== agent.name) agentSelect.value = agent.name;
+    const backupSelect = document.getElementById('agent-backup-provider');
+    const backupModel = document.getElementById('agent-backup-model');
+    if (backupSelect) {
+      [...backupSelect.options].forEach(option => { option.disabled = option.value === agent.provider; });
+      backupSelect.value = agent.backup_provider || '';
+    }
+    if (backupModel) backupModel.value = agent.backup_model || '';
   }
 
   function renderAgentRoster() {
@@ -874,9 +896,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!agent) return;
     const changedAgent = selectedAgentName && selectedAgentName !== agent.name;
     if (changedAgent && ptySocket) disconnectPty();
+    if (changedAgent && backupFeedback) backupFeedback.textContent = '';
     selectedAgentName = agent.name;
     updateAgentWorkspace(agent);
     renderAgentRoster();
+    if (takeoverTokens.has(agent.name) && (!ptySocket || changedAgent)) connectPty(agent.name);
   }
 
   function selectAgentByName(name) {
@@ -949,11 +973,16 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = await res.json();
       if (!providerBadges) return;
       providerBadges.innerHTML = '';
-      const list = data.qualified_providers || (data.readiness && data.readiness.configuredProviders) || (data.providers ? data.providers.map(p => p.name) : []);
+      const list = data.providers || [];
       list.forEach(p => {
         const badge = document.createElement('span');
-        badge.className = 'badge badge-success';
-        badge.textContent = `Provider ${p}: Qualified (0 credentials)`;
+        const statusLabel = p.status === 'available' ? 'Available'
+          : p.status === 'quota_limited' ? 'Quota limited' : 'Unavailable';
+        badge.className = `badge ${p.status === 'available' ? 'badge-success' : 'badge-warning'}`;
+        const reset = p.reset_at ? ` · resets ${new Date(p.reset_at).toLocaleTimeString()}` : '';
+        badge.textContent = `Provider ${p.name}: ${statusLabel}${reset}`;
+        const affectedAgents = p.agents?.length ? ` Assigned agents: ${p.agents.join(', ')}.` : '';
+        badge.title = `${p.reason || `${p.name} runner detected`}${affectedAgents}`;
         providerBadges.appendChild(badge);
       });
     } catch (err) {
@@ -993,6 +1022,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     sse.addEventListener('agent_answered', (e) => {
       const data = JSON.parse(e.data);
+      loadReadiness();
       if (pixelRenderer && data.agent_id) {
         const bubblePreview = data.answer.replace(/\[\d+m/g, '').replace(/[\r\n]+/g, ' ').slice(0, 28);
         pixelRenderer.showSpeechBubble(data.agent_id, bubblePreview, 5000);
@@ -1000,6 +1030,16 @@ document.addEventListener('DOMContentLoaded', () => {
       if (data.pr_number && data.pr_number !== 'live') {
         log(`[${data.agent_id}] Response regarding PR #${data.pr_number}: ${data.question}`, 'success');
       }
+    });
+
+    sse.addEventListener('agent_thinking', (e) => {
+      const data = JSON.parse(e.data);
+      pixelRenderer?.updateAgentStates([{ name: data.agent_id, state: 'thinking' }]);
+    });
+
+    sse.addEventListener('agent_thinking_ended', (e) => {
+      const data = JSON.parse(e.data);
+      pixelRenderer?.updateAgentStates([{ name: data.agent_id, state: data.state || 'idle' }]);
     });
 
     sse.addEventListener('command_executed', (e) => {
@@ -1018,6 +1058,28 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Interactive Browser Takeover Cycle
+  document.getElementById('save-agent-backup')?.addEventListener('click', async () => {
+    const agentId = selectedAgentName;
+    const backupProvider = document.getElementById('agent-backup-provider')?.value || null;
+    const backupModel = document.getElementById('agent-backup-model')?.value.trim() || null;
+    try {
+      const response = await fetch('/api/v1/commands', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command_type: 'agent.provider_config', payload: {
+          agent_id: agentId, backup_provider: backupProvider, backup_model: backupModel,
+        } }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || 'Could not save backup provider');
+      log(`${agentId}: ${backupProvider ? `explicit backup ${backupProvider} saved` : 'strict provider routing saved'}`, 'success');
+      if (backupFeedback) backupFeedback.textContent = backupProvider ? `${backupProvider} backup saved` : 'Strict routing saved';
+      await loadAgents();
+    } catch (error) {
+      log(`Provider setting failed: ${error.message}`, 'action');
+      if (backupFeedback) backupFeedback.textContent = `Could not save: ${error.message}`;
+    }
+  });
+
   if (btnTakeover && btnRelease) {
     btnTakeover.addEventListener('click', async () => {
       const agentId = selectedAgentName || agentSelect?.value || 'Dev-1';
@@ -1031,8 +1093,13 @@ document.addEventListener('DOMContentLoaded', () => {
           body: JSON.stringify({ action: 'takeover', agent_id: agentId })
         });
         const result = await res.json();
-        const token = (result.result && result.result.takeover_token) || (result.session && result.session.takeover_token) || 'tok-live';
-        log(`Takeover confirmed: ${agentId} is now HUMAN_OWNED (token: ${token.slice(0, 8)}...)`, 'success');
+        if (!res.ok || result.status !== 'acknowledged' || !result.result?.takeover_token) {
+          throw new Error(result.error || 'Takeover was not acquired');
+        }
+        const token = result.result.takeover_token;
+        takeoverTokens.set(agentId, token);
+        persistTakeoverTokens();
+        log(`Takeover confirmed: ${agentId} is now HUMAN_OWNED`, 'success');
         stateBadge.textContent = 'Human Owned';
         btnRelease.disabled = false;
         if (cmdInput) cmdInput.disabled = false;
@@ -1044,7 +1111,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         loadAgents();
       } catch (err) {
-        log(`Takeover failed: ${err.message}`, 'action');
+        reportTerminalIssue(`Takeover failed: ${err.message}`);
         btnTakeover.disabled = false;
       }
     });
@@ -1058,13 +1125,18 @@ document.addEventListener('DOMContentLoaded', () => {
         const res = await fetch('/api/v1/commands', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'release', agent_id: agentId, guidance: 'Takeover completed successfully.' })
+          body: JSON.stringify({ action: 'release', agent_id: agentId, takeover_token: takeoverTokens.get(agentId), guidance: 'Takeover completed successfully.' })
         });
-        await res.json();
+        const released = await res.json();
+        if (!res.ok) throw new Error(released.error || 'Release failed');
+        takeoverTokens.delete(agentId);
+        persistTakeoverTokens();
         log(`Takeover released: ${agentId} returned to AUTO`, 'success');
         stateBadge.textContent = 'Auto';
         btnTakeover.disabled = false;
         disconnectPty();
+        clearTerminalIssue();
+        setSessionConnectionState('Ready', 'Take over to connect this agent’s CLI.');
         if (cmdInput) {
           cmdInput.disabled = true;
           cmdInput.value = '';
@@ -1072,7 +1144,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (btnSendCmd) btnSendCmd.disabled = true;
         loadAgents();
       } catch (err) {
-        log(`Release failed: ${err.message}`, 'action');
+        reportTerminalIssue(`Release failed: ${err.message}`);
         btnRelease.disabled = false;
       }
     });
@@ -1080,80 +1152,226 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- Live WebSocket PTY Interface for Takeover ---
   let ptySocket = null;
+  let terminalInstance = null;
+  let fitAddon = null;
+  let reconnectTimer = null;
+  let reconnectAttempts = 0;
+  let controlPending = false;
+  let resumeRequested = false;
+  let terminalReady = false;
   const cmdInput = document.getElementById('takeover-command-input');
   const btnSendCmd = document.getElementById('btn-send-command');
+  const shellComposer = document.getElementById('takeover-shell-composer');
+  const modeButtons = document.querySelectorAll('[data-input-mode]');
+  let inputMode = 'agent_tui';
+
+  function setSessionConnectionState(state, caption) {
+    const stateEl = document.getElementById('agent-session-state');
+    const captionEl = document.getElementById('agent-session-caption');
+    if (stateEl) stateEl.textContent = state;
+    if (captionEl) captionEl.textContent = caption;
+  }
+
+  function reportTerminalIssue(message) {
+    log(message, 'action');
+    if (terminalAlert) {
+      terminalAlert.textContent = message;
+      terminalAlert.hidden = false;
+    }
+    setSessionConnectionState('Unavailable', message);
+    if (inputMode === 'agent_tui') terminalInstance?.writeln(`\r\n[AgentCrew] ${message}`);
+  }
+
+  function clearTerminalIssue() {
+    if (terminalAlert) terminalAlert.hidden = true;
+  }
+
+  function showTerminalMode() {
+    const tui = inputMode === 'agent_tui';
+    if (terminalEmulator) terminalEmulator.hidden = !tui;
+    if (terminal) terminal.hidden = tui;
+    if (mobileKeys) mobileKeys.hidden = !tui;
+    if (shellComposer) shellComposer.hidden = tui;
+    if (tui && fitAddon && terminalInstance) {
+      requestAnimationFrame(() => { fitAddon.fit(); sendTerminalResize(); });
+    }
+  }
+
+  function sendTerminalResize() {
+    if (inputMode !== 'agent_tui' || !terminalInstance || ptySocket?.readyState !== WebSocket.OPEN) return;
+    ptySocket.send(JSON.stringify({ type: 'resize', cols: terminalInstance.cols, rows: terminalInstance.rows }));
+  }
+
+  function sendTerminalInput(data) {
+    if (ptySocket?.readyState !== WebSocket.OPEN) return;
+    if (controlPending) {
+      if (/^[a-z]$/i.test(data)) data = String.fromCharCode(data.toUpperCase().charCodeAt(0) - 64);
+      controlPending = false;
+      const ctrl = mobileKeys?.querySelector('[data-terminal-key="control"]');
+      if (ctrl) ctrl.setAttribute('aria-pressed', 'false');
+    }
+    ptySocket.send(JSON.stringify({ type: 'input', data }));
+  }
+
+  mobileKeys?.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-terminal-key]');
+    if (!button) return;
+    if (button.dataset.terminalKey === 'control') {
+      controlPending = !controlPending;
+      button.setAttribute('aria-pressed', String(controlPending));
+      terminalInstance?.focus();
+      return;
+    }
+    const keys = { escape: '\x1b', tab: '\t', left: '\x1b[D', right: '\x1b[C', up: '\x1b[A', down: '\x1b[B' };
+    controlPending = false;
+    const ctrl = mobileKeys?.querySelector('[data-terminal-key="control"]');
+    if (ctrl) ctrl.setAttribute('aria-pressed', 'false');
+    sendTerminalInput(keys[button.dataset.terminalKey]);
+    terminalInstance?.focus();
+  });
+
+  if (terminalEmulator && window.Terminal && window.FitAddon) {
+    new ResizeObserver(() => {
+      if (terminalInstance && !terminalEmulator.hidden) {
+        fitAddon.fit();
+        sendTerminalResize();
+      }
+    }).observe(terminalEmulator);
+  }
+
+  modeButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      inputMode = button.dataset.inputMode === 'shell' ? 'shell' : 'agent_tui';
+      modeButtons.forEach((candidate) => {
+        const selected = candidate.dataset.inputMode === inputMode;
+        candidate.classList.toggle('active', selected);
+        candidate.setAttribute('aria-pressed', String(selected));
+      });
+      disconnectPty();
+      showTerminalMode();
+      if (!btnRelease.disabled) {
+        connectPty(selectedAgentName || agentSelect?.value || 'Dev-1');
+      }
+    });
+  });
+
+  showTerminalMode();
 
   function connectPty(agentId) {
-    if (ptySocket) {
-      try { ptySocket.close(); } catch (_) {}
-      ptySocket = null;
+    disconnectPty();
+    resumeRequested = false;
+
+    const selected = liveAgents.find((agent) => agent.name === agentId);
+    if (inputMode === 'agent_tui' && selected?.provider_status === 'disconnected' && !selected.active_provider) {
+      reportTerminalIssue(`${selected.provider} CLI unavailable or unqualified. Configure an explicit backup CLI or release takeover.`);
+      return;
     }
 
     const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${proto}//${window.location.host}/api/v1/pty?agent_id=${encodeURIComponent(agentId)}`;
+    const token = takeoverTokens.get(agentId);
+    if (!token) { log('[Session] Takeover token missing; connection unavailable', 'action'); return; }
+    const wsUrl = `${proto}//${window.location.host}/api/v1/pty?mode=${inputMode}&agent_id=${encodeURIComponent(agentId)}&token=${encodeURIComponent(token)}`;
 
     try {
-      ptySocket = new WebSocket(wsUrl);
+      const socket = new WebSocket(wsUrl);
+      ptySocket = socket;
 
-      ptySocket.onopen = () => {
-        log(`[PTY] Connected interactive pseudo-terminal session for ${agentId}`, 'success');
+      if (inputMode === 'agent_tui') {
+        if (!window.Terminal || !window.FitAddon) throw new Error('Terminal assets failed to load');
+        terminalInstance = new window.Terminal({
+          cursorBlink: true, scrollback: 2000, fontSize: 13, lineHeight: 1.25, screenReaderMode: true,
+          theme: { background: '#0d111a', foreground: '#e5eaf2', cursor: '#71baf1' },
+        });
+        fitAddon = new window.FitAddon.FitAddon();
+        terminalInstance.loadAddon(fitAddon);
+        terminalInstance.open(terminalEmulator);
+        fitAddon.fit();
+        terminalInstance.onData(sendTerminalInput);
+      }
+
+      socket.onopen = () => {
+        log(`[Session] Connected ${inputMode} channel for ${agentId}`, 'success');
+        setSessionConnectionState('Connecting', 'WebSocket connected; waiting for the CLI…');
+        if (inputMode === 'agent_tui') { sendTerminalResize(); terminalInstance?.focus(); }
       };
 
-      ptySocket.onmessage = (event) => {
+      socket.onmessage = (event) => {
+        if (ptySocket !== socket) return;
         try {
           const msg = JSON.parse(event.data);
           if (msg.type === 'ready') {
-            log(`[PTY Ready] Session ${msg.sessionId} spawned (cwd: ${msg.cwd})`, 'system');
+            reconnectAttempts = 0;
+            terminalReady = true;
+            clearTerminalIssue();
+            resumeRequested = Boolean(msg.resumeRequested);
+            const label = `${msg.provider || 'Shell'}${msg.fallback ? ' (explicit backup)' : ''}`;
+            log(`[PTY Ready] ${label} · ${msg.resumeRequested ? 'resume requested; verify CLI state' : 'new conversation (native ID not yet tracked)'}`, 'system');
+            setSessionConnectionState('Connected', `${label} CLI connected${msg.resumeRequested ? '; verify resumed context in CLI' : ''}.`);
           } else if (msg.type === 'output') {
-            const raw = msg.data;
-            const cleaned = raw
-              .replace(/\x1b\][^\x07\x1b]*(\x07|\x1b\\)/g, '')
-              .replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '')
-              .replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g, '');
-
-            const lines = cleaned.split(/\r?\n/);
-            lines.forEach((line) => {
-              const trimmed = line.trim();
-              if (trimmed && !trimmed.startsWith(']2;') && !trimmed.startsWith(']7;')) {
-                log(trimmed);
-              }
-            });
+            if (inputMode === 'agent_tui') terminalInstance?.write(msg.data);
+            else log(msg.data.replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '').trim());
+          } else if (msg.type === 'exit') {
+            terminalReady = false;
+            const exitText = resumeRequested && msg.exitCode !== 0
+              ? 'Native resume failed; this CLI session is unavailable.'
+              : `CLI exited with code ${msg.exitCode}`;
+            reportTerminalIssue(exitText);
+          } else if (msg.type === 'error') {
+            reportTerminalIssue(msg.data);
           }
         } catch (_) {
           log(event.data);
         }
       };
 
-      ptySocket.onclose = () => {
-        log(`[PTY] Session disconnected`, 'system');
+      socket.onclose = () => {
+        if (ptySocket !== socket) return;
+        terminalReady = false;
+        reportTerminalIssue('CLI connection lost. Reconnecting if takeover is still active…');
         ptySocket = null;
+        if (takeoverTokens.has(agentId) && ++reconnectAttempts <= 3) {
+          reconnectTimer = setTimeout(() => connectPty(agentId), 1200);
+        } else if (takeoverTokens.has(agentId)) {
+          reportTerminalIssue('CLI connection unavailable. Check provider readiness, then refresh this tab to retry.');
+        }
       };
 
-      ptySocket.onerror = (err) => {
-        log(`[PTY Error] WebSocket connection failed`, 'action');
+      socket.onerror = (err) => {
+        if (ptySocket !== socket) return;
+        terminalReady = false;
+        reportTerminalIssue('CLI WebSocket connection failed. Check provider availability.');
       };
     } catch (err) {
-      log(`[PTY Error] Unable to connect: ${err.message}`, 'action');
+      reportTerminalIssue(`Unable to connect: ${err.message}`);
     }
   }
 
   function disconnectPty() {
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+    terminalReady = false;
+    controlPending = false;
+    const ctrl = mobileKeys?.querySelector('[data-terminal-key="control"]');
+    if (ctrl) ctrl.setAttribute('aria-pressed', 'false');
     if (ptySocket) {
       try { ptySocket.close(); } catch (_) {}
       ptySocket = null;
     }
+    terminalInstance?.dispose();
+    terminalInstance = null;
+    fitAddon = null;
   }
 
   async function executeOperatorCommand() {
+    if (inputMode !== 'shell') return;
     if (!cmdInput || !cmdInput.value.trim()) return;
     const commandText = cmdInput.value.trim();
-    const agentId = agentSelect ? agentSelect.value : 'Dev-1';
+    const agentId = selectedAgentName || agentSelect?.value || 'Dev-1';
 
     log(`[Operator > ${agentId}]$ ${commandText}`, 'action');
     cmdInput.value = '';
 
     if (ptySocket && ptySocket.readyState === WebSocket.OPEN) {
-      ptySocket.send(JSON.stringify({ type: 'input', data: `${commandText}\n` }));
+      ptySocket.send(JSON.stringify({ type: 'input', data: commandText, mode: inputMode }));
     } else {
       // Fallback to HTTP command dispatch
       try {
@@ -1162,10 +1380,11 @@ document.addEventListener('DOMContentLoaded', () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             command_type: 'session.exec',
-            payload: { agent_id: agentId, command: commandText }
+            payload: { agent_id: agentId, command: commandText, mode: inputMode, takeover_token: takeoverTokens.get(agentId) }
           })
         });
         const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Command rejected');
         if (data.result && data.result.output) {
           log(data.result.output, 'success');
         }

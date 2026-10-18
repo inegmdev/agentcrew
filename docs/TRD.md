@@ -75,7 +75,7 @@ architectural changes, a Backlog decision.
 | Consolidation | Writes MEMORY.proposed.md; no automatic application | Keep default; add policy-controlled versioned application in new supervisor |
 | Agent invocation | One-shot headless command selection; only Claude -p marked verified | Replace supervised path with provider plugins; retain legacy compatibility |
 | State | Installer registry and Markdown | Add per-project event store, artifacts, commands, sessions, and projections |
-| Validation | No test directory or CI workflow currently present | Build fixture/contract/workflow/browser/platform suites |
+| Validation | Node test suite; pull-request CI runs `npm test` on Linux | Expand fixture/contract/workflow/browser/platform suites |
 | UI | None for the supervisor | Ship compiled dashboard assets with supervisor |
 
 The old task-1 through task-10 backlog is historical planning input. Do not implement
@@ -453,6 +453,19 @@ from a silent session with unknown state.
 
 ### 8.1 Browser chat and takeover
 
+Current takeover implementation adds a real PTY for the assigned provider CLI.
+After a confirmed autonomous quiescence, the supervisor starts a new interactive
+process with the saved provider-native conversation ID (`codex resume
+--include-non-interactive <id>` or `agy --conversation <id>`). This is the same
+conversation, not the same OS process. No saved ID means a visibly new conversation;
+native resume errors must not be presented as successful handoff. Gemini remains
+unqualified and disconnected. A persisted, explicit per-agent backup provider/model
+may be selected only when the primary is unavailable; provider-native IDs are stored
+separately and context is not transferred between providers.
+The current CLI TUI path cannot reliably obtain a native ID for a newly created
+interactive conversation; until that provider contract is qualified, it labels
+such sessions new and does not promise resume after release.
+
 ```mermaid
 sequenceDiagram
     actor Human
@@ -485,11 +498,26 @@ by runtime escalation when needed. Hard-stop grace is five seconds before forced
 termination of the owned tree. Aborting a process may require a new session/handoff;
 the UI must not pretend it resumed the identical native conversation.
 
+Takeover ownership and scheduler holds are keyed by canonical agent identity. A
+successful acquisition returns an opaque token scoped to that agent; human chat,
+release, and shell WebSocket upgrades must present it. Reject duplicate acquisition
+with a conflict. Authorize a shell upgrade before accepting the WebSocket or spawning
+its PTY. Scheduler holds suppress autonomous queued input while allowing human chat
+through the same per-agent serial queue. If the provider process tree does not
+confirm quiescence within the soft budget, retain `blocked` and issue no token.
+
 While `human_owned`, suppress autonomous dispatch and watchdog nudges. Permit only
 human-sourced input and resulting authorized tools. Blanket denial of every tool
 while human-owned would defeat the product and is explicitly replaced by source-aware
 dispatch and permission checks. A tool already running must finish, stop, or be marked
 uncertain before control is reported as safely acquired.
+
+The Takeover Console selects Agent CLI or Shell explicitly, defaulting to Agent CLI.
+The CLI channel carries raw keystrokes, resize dimensions, and PTY output over a
+token-bound WebSocket; Shell is a separate channel. A browser disconnect detaches
+display but does not kill the CLI. Same-tab refresh reattaches using a token held
+in sessionStorage. Release waits for CLI and shell process exit before lifting the
+autonomous hold. Input routing does not infer intent from command names.
 
 ### 8.2 Runtime interface
 
@@ -856,6 +884,12 @@ reusing an idempotency key return conflict; identical retries return the stored 
 | GET /metrics, /diagnostics | Evidence-linked metrics and findings |
 | GET /events?after=cursor | Authenticated SSE stream with ordered cursor IDs |
 
+The Code Review drawer's `agent.ask` command loads the selected pull request's
+current title, author, description, branches, and diff through `gh`, then sends
+that context with the question through the configured provider CLI. Provider or
+GitHub failures are returned as errors for the drawer to display; no review text
+is synthesized as a fallback.
+
 Command types include initialize/configure, import.confirm, plan.approve,
 iteration.start/pause/resume/recommit/close, task.request_transition,
 assignment.submit_handoff, review.submit, message.send, permission.decide,
@@ -863,6 +897,22 @@ session.takeover/release/interrupt/recover, popup.propose/decide,
 memory.decide, diagnostic.request/decide, integration.request_merge.
 Each has its own schema and authorization predicate; arbitrary tool execution is
 not exposed as a generic unauthenticated endpoint.
+
+`GET /readiness` probes each adapter at request time. Its `providers`
+array uses `{ name, status, available, capabilities, reason, reset_at, agents }`, where
+`status` is `available`, `unavailable`, or `quota_limited`; `reset_at` is an ISO
+timestamp when the CLI error includes a parseable retry duration, otherwise null.
+`available_providers` lists detected, usable runners. `qualified_providers`
+remains an empty compatibility field until authenticated capability checks exist;
+binary detection alone is not qualification. Gemini is explicitly `unavailable`
+even when installed: the required roster-only delegation guard has not been
+verified in the official CLI contract. `agents` lists roster members assigned
+to each provider, and an unavailable assignment makes readiness `blocked`.
+Adapter probes do not make an authenticated or billable provider request.
+
+Command requests require JSON and same-origin browser requests; no wildcard CORS
+is served. Takeover release returns a conflict while a human chat turn is active,
+so autonomous work cannot resume before that turn finishes.
 
 Return validation errors (400/422), unauthorized (401), forbidden action (403), missing
 entity (404), stale revision/idempotency conflict (409), overload (429), or unavailable
@@ -887,6 +937,14 @@ the authenticated connection is restored. Persisted command IDs let the browser 
 results of requests whose HTTP response was lost. Multiple tabs share the same server
 state and optimistic versions; no tab privately owns an approval.
 
+The interactive `/api/v1/pty?mode=agent_tui` WebSocket carries `ready`, raw PTY
+`output`, `input`, `resize`, `error`, and `exit` frames. The browser renders output
+with xterm.js; it must not strip control sequences. Only one live browser socket
+owns an agent PTY at once, though the same tab may reconnect after refresh. The
+headless chat service separately parses newline-delimited provider events and
+forwards only assistant text; metadata-only output is a failed answer, never raw
+JSON shown as dialogue.
+
 ### 12.3 UI composition
 
 Build routes for setup, planning/artifacts, Kanban, team room, observability, session
@@ -909,6 +967,12 @@ Ordinary setup prepares files; it does not auto-start an iteration or authentica
 providers on the user's behalf.
 
 ## 13. Security and access
+
+Implementation warning (2026-10-18): the current dashboard has no authenticated
+browser session or CSRF protection and therefore does **not** meet this target.
+`--host` is an explicit short-lived test switch, not a secure remote deployment.
+The takeover token is an ownership token, not login; any client that can reach
+the HTTP port can acquire control. Keep the default loopback bind for ordinary use.
 
 Bind only to loopback in v1. Validate Host and Origin, deny cross-origin mutations,
 and use an authenticated local browser session plus CSRF protection. Loopback is not
@@ -1097,11 +1161,14 @@ clocks and IDs; tests should not sleep for watchdog/review budgets.
 
 ### 16.3 CI and local qualification
 
-Create credential-free Linux/Windows jobs for unit, contracts, workflows, artifact
+Pull requests run the existing credential-free `npm test` suite on Linux. Changes
+to `main` follow the repository convention: use a pull request and require passing
+CI checks; GitHub branch protection is configured separately by repository owners.
+Expand to credential-free Linux/Windows jobs for unit, contracts, workflows, artifact
 integration, and real local Git tests. Run browser tests with mock providers. Build
 the UI, validate package contents, run setup twice against fixtures, and verify that
 compiled assets work without a development server. Pin supported Node/dependency
-versions. No existing CI was run for this documentation task because none exists.
+versions.
 
 Record real provider transcripts locally into sanitized, versioned fixtures. Every
 vendor-specific mocked behavior points to captured evidence; intentionally synthetic

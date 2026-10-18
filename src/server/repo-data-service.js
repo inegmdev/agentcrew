@@ -206,6 +206,32 @@ class RepoDataService {
     };
   }
 
+  async getPullRequestReviewContext(number) {
+    const prNumber = Number(number);
+    if (!Number.isSafeInteger(prNumber) || prNumber < 1) throw new Error('A valid pull request number is required');
+    const [details, diff] = await Promise.all([
+      this.execCommand('gh', ['pr', 'view', String(prNumber), '--json', 'number,title,author,body,headRefName,baseRefName']),
+      this.execCommand('gh', ['pr', 'diff', String(prNumber)])
+    ]);
+    if (details.error) throw new Error(`Unable to load PR #${prNumber} details: ${(details.stderr || details.error.message).trim()}`);
+    if (diff.error) throw new Error(`Unable to load PR #${prNumber} diff: ${(diff.stderr || diff.error.message).trim()}`);
+    let pr;
+    try { pr = JSON.parse(details.stdout); }
+    catch (error) { throw new Error(`Unable to parse PR #${prNumber} details: ${error.message}`); }
+    if (Number(pr.number) !== prNumber) throw new Error(`GitHub returned a different pull request than #${prNumber}`);
+    const diffText = diff.stdout || '';
+    return {
+      number: prNumber,
+      title: pr.title || `PR #${prNumber}`,
+      author: pr.author?.login || 'unknown',
+      body: pr.body || '',
+      baseBranch: pr.baseRefName || '',
+      headBranch: pr.headRefName || '',
+      diff: diffText.slice(0, 40000),
+      diffTruncated: diffText.length > 40000
+    };
+  }
+
   /**
    * Query pull requests via `gh` CLI or git log fallback
    */

@@ -180,6 +180,28 @@ test('SupervisorServer serves TRD §12 API routes and SSE stream', async (t) => 
     assert.equal((await pendingChat).status, 200);
     server.chatService.generateResponse = previousGenerate;
 
+    let finishShell;
+    let markShellStarted;
+    const shellStarted = new Promise((resolve) => { markShellStarted = resolve; });
+    const previousExecute = server.ptyManager.execute;
+    server.ptyManager.execute = async () => {
+      markShellStarted();
+      return new Promise((resolve) => { finishShell = resolve; });
+    };
+    const pendingShell = fetch(`${baseUrl}/api/v1/commands`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command_type: 'session.exec', payload: { agent_id: 'dev-1', command: 'pwd', mode: 'shell', takeover_token: token } })
+    });
+    await shellStarted;
+    const releaseDuringShell = await fetch(`${baseUrl}/api/v1/commands`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command_type: 'session.release', payload: { agent_id: 'dev-1', takeover_token: token } })
+    });
+    assert.equal(releaseDuringShell.status, 409);
+    finishShell({ stdout: '/repo', stderr: '', code: 0 });
+    assert.equal((await pendingShell).status, 200);
+    server.ptyManager.execute = previousExecute;
+
     // 2. Release Takeover
     const releaseRes = await fetch(`${baseUrl}/api/v1/commands`, {
       method: 'POST',

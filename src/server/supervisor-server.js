@@ -169,8 +169,13 @@ class SupervisorServer {
               if (input.mode !== 'shell') throw new Error('Shell socket accepts shell input only');
               ptySession.write(`${input.text}\n`);
             } else if (input.mode === 'shell') {
-              const result = await this.ptyManager.execute(input.text, { cwd: this.repoPath });
-              ws.send(JSON.stringify({ type: 'output', data: result.stdout || result.stderr || '' }));
+              this.beginHumanTurn(agentId);
+              try {
+                const result = await this.ptyManager.execute(input.text, { cwd: this.repoPath });
+                ws.send(JSON.stringify({ type: 'output', data: result.stdout || result.stderr || '' }));
+              } finally {
+                this.endHumanTurn(agentId);
+              }
             } else {
               const turnId = crypto.randomUUID();
               activeChatTurns.add(turnId);
@@ -529,12 +534,15 @@ class SupervisorServer {
             timestamp: new Date().toISOString()
           });
         } else {
+          this.beginHumanTurn(agentId);
           try {
             if (input.mode !== 'shell' || !input.text) throw Object.assign(new Error('A shell command is required'), { statusCode: 400 });
             const execRes = await this.ptyManager.execute(input.text, { cwd: this.repoPath });
             output = execRes.stdout || execRes.stderr || `[Executed with exit code ${execRes.code}]`;
           } catch (e) {
             output = `[Command Error on ${agentId}]: ${e.message}`;
+          } finally {
+            this.endHumanTurn(agentId);
           }
         }
 

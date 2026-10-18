@@ -34,17 +34,122 @@ document.addEventListener('DOMContentLoaded', () => {
   const agentFilterButtons = document.querySelectorAll('.agent-filter[data-agent-filter]');
   const roomMapView = document.getElementById('room-map-view');
   const teamRoomView = document.getElementById('view-team-room');
+  const teamRoomChatFeed = document.getElementById('team-room-chat-feed');
+  const teamChatInput = document.getElementById('team-chat-input');
+  const btnSendChat = document.getElementById('btn-send-chat');
+  const tabBtnTerminal = document.getElementById('tab-btn-terminal');
+  const tabBtnChat = document.getElementById('tab-btn-chat');
+  const panelTerminalView = document.getElementById('panel-terminal-view');
+  const panelChatView = document.getElementById('panel-chat-view');
   let liveAgents = [];
   let selectedAgentName = '';
   let activeAgentFilter = 'all';
 
+  function formatToolChatText(text) {
+    if (!text) return '';
+    const lines = text.split('\n');
+    let html = '';
+    let inTool = false;
+    lines.forEach(line => {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('●') || trimmed.startsWith('Tool:') || trimmed.startsWith('Edit(') || trimmed.startsWith('Write(')) {
+        if (inTool) html += '</div>';
+        html += `<div class="tool-call-card"><div class="tool-call-header"><span class="tool-dot">●</span> <strong>${trimmed.replace(/^[●\s]+/, '')}</strong></div>`;
+        inTool = true;
+      } else if (inTool && trimmed.startsWith('└')) {
+        html += `<div class="tool-call-body">${trimmed}</div></div>`;
+        inTool = false;
+      } else if (trimmed.startsWith('└ done') || trimmed.includes('tok/s')) {
+        if (inTool) { html += '</div>'; inTool = false; }
+        html += `<div class="tool-metrics">${trimmed}</div>`;
+      } else {
+        if (inTool) { html += '</div>'; inTool = false; }
+        if (trimmed) html += `<div class="chat-paragraph">${trimmed}</div>`;
+      }
+    });
+    if (inTool) html += '</div>';
+    return html;
+  }
+
+  function appendChatMessage(sender, text, isAgent = false, avatarLetter = null) {
+    if (!teamRoomChatFeed) return;
+    const msg = document.createElement('div');
+    msg.className = `chat-msg ${isAgent ? 'agent' : 'human'}`;
+    const initial = (avatarLetter || (sender ? sender.charAt(0) : '?')).toUpperCase();
+    const formatted = isAgent ? formatToolChatText(text) : `<div class="chat-text">${text}</div>`;
+    msg.innerHTML = `
+      <div class="chat-avatar">${initial}</div>
+      <div class="chat-body">
+        <div class="chat-meta">
+          <span class="chat-sender">${sender}</span>
+          <span class="chat-time">${new Date().toLocaleTimeString()}</span>
+        </div>
+        ${formatted}
+      </div>
+    `;
+    teamRoomChatFeed.appendChild(msg);
+    teamRoomChatFeed.scrollTop = teamRoomChatFeed.scrollHeight;
+  }
+
+  function seedInitialCockpitFeed(agent) {
+    if (!teamRoomChatFeed) return;
+    const name = agent?.name || 'Full-Stack Developer';
+    const initials = name.slice(0, 2).toUpperCase();
+    const color = getAgentColor ? getAgentColor(agent) : '#0284c7';
+    teamRoomChatFeed.innerHTML = `
+      <div class="chat-msg agent">
+        <div class="chat-avatar" style="background:${color};color:#fff;">${initials}</div>
+        <div class="chat-body">
+          <div class="chat-meta">
+            <span class="chat-sender">${name}</span>
+            <span class="chat-time">Just now</span>
+          </div>
+          <div class="chat-paragraph">
+            Found it. The list renders each user as a plain row. I'll extract a small component, wire it in, and keep the existing data flow untouched so the change stays isolated and easy to review.
+          </div>
+          <div class="tool-call-card">
+            <div class="tool-call-header">
+              <span class="tool-dot">●</span>
+              <strong class="tool-name">Edit</strong><span class="tool-target">(src/components/UserList.tsx)</span>
+            </div>
+            <div class="tool-call-body">
+              └ Applied 3-line change
+            </div>
+          </div>
+          <div class="tool-call-card">
+            <div class="tool-call-header">
+              <span class="tool-dot">●</span>
+              <strong class="tool-name">Write</strong><span class="tool-target">(src/components/Avatar.tsx)</span>
+            </div>
+            <div class="tool-call-body">
+              └ Wrote 42 lines to new file
+            </div>
+          </div>
+          <div class="chat-paragraph">
+            Done. The component compiles and the render path is unchanged apart from the new avatar. You can review the diff in the Changes tab.
+          </div>
+          <div class="tool-metrics">
+            └ done · 1,284.5 tok/s · 6.4s
+          </div>
+          <div class="demo-notice-box">
+            This reply is simulated for the AgentsRoom demo.<br>
+            Download AgentsRoom to run real agents on your code:<br>
+            <a href="https://agentsroom.dev/download" target="_blank" rel="noreferrer">https://agentsroom.dev/download</a>
+          </div>
+        </div>
+      </div>
+    `;
+    teamRoomChatFeed.scrollTop = teamRoomChatFeed.scrollHeight;
+  }
+
   function log(text, type = 'system') {
-    if (!terminal) return;
-    const line = document.createElement('div');
-    line.className = `term-line ${type}`;
-    line.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
-    terminal.appendChild(line);
-    terminal.scrollTop = terminal.scrollHeight;
+    if (terminal) {
+      const line = document.createElement('div');
+      line.className = `term-line ${type}`;
+      line.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
+      terminal.appendChild(line);
+      terminal.scrollTop = terminal.scrollHeight;
+    }
   }
 
   // --- Theme & Appearance Accent Management ---
@@ -194,6 +299,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (t.dataset.view === targetViewId) t.setAttribute('aria-current', 'page');
       else t.removeAttribute('aria-current');
     });
+    document.body.classList.toggle('in-team-room', targetViewId === 'view-team-room');
     if (mobileViewTitle) mobileViewTitle.textContent = viewLabels[targetViewId] || 'AgentCrew';
     if (mobileMoreBtn) {
       const secondaryViews = ['view-repositories', 'view-observability', 'view-settings'];
@@ -718,7 +824,47 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = await res.json();
       log(`Workspace loaded: ${data.workspace.name} (${data.agents.length} agents)`);
       const warning = document.getElementById('remote-http-warning');
-      if (warning) warning.hidden = !data.public_http_warning;
+      const isDismissed = sessionStorage.getItem('agentcrew_remote_warning_dismissed') === '1';
+      if (warning) {
+        if (data.public_http_warning && !isDismissed) {
+          warning.hidden = false;
+        } else {
+          warning.hidden = true;
+        }
+      }
+
+      const btnDismiss = document.getElementById('btn-dismiss-remote-warning');
+      if (btnDismiss && !btnDismiss.dataset.wired) {
+        btnDismiss.dataset.wired = 'true';
+        btnDismiss.addEventListener('click', () => {
+          if (warning) {
+            warning.classList.add('toast-hiding');
+            setTimeout(() => {
+              warning.hidden = true;
+              warning.classList.remove('toast-hiding');
+            }, 200);
+          }
+          sessionStorage.setItem('agentcrew_remote_warning_dismissed', '1');
+        });
+      }
+
+      // Update brand name & current project title
+      const brandTitle = document.getElementById('brand-title');
+      if (brandTitle && data.workspace?.name) {
+        brandTitle.textContent = data.workspace.name;
+      }
+      const brandSub = document.querySelector('.brand-sub');
+      if (brandSub && data.workspace?.name) {
+        brandSub.textContent = `Active: ${data.workspace.name}`;
+      }
+      const topbarProjName = document.getElementById('topbar-project-name');
+      if (topbarProjName && data.workspace?.name) {
+        topbarProjName.textContent = data.workspace.name;
+      }
+      const projAsstTitle = document.getElementById('project-assistant-title');
+      if (projAsstTitle && data.workspace?.name) {
+        projAsstTitle.textContent = `${data.workspace.name} assistant`;
+      }
     } catch (err) {
       log(`Error loading workspace: ${err.message}`, 'action');
     }
@@ -772,7 +918,7 @@ document.addEventListener('DOMContentLoaded', () => {
       statusEl.classList.toggle('is-human-owned', owned);
     }
     const roleEl = document.getElementById('selected-agent-role');
-    if (roleEl) roleEl.textContent = agent.role || 'Agent';
+    if (roleEl) roleEl.textContent = agent.role || 'Full-Stack Developer';
     const providerEl = document.getElementById('selected-agent-provider');
     if (providerEl) providerEl.textContent = String(agent.active_provider || agent.provider || 'Provider').toUpperCase();
     const providerStatusEl = document.getElementById('selected-agent-provider-status');
@@ -780,7 +926,7 @@ document.addEventListener('DOMContentLoaded', () => {
       ? `Backup active · ${agent.provider} disconnected`
       : agent.provider_status === 'disconnected' ? 'Disconnected · CLI unavailable' : 'CLI detected · sign-in unverified';
     const modelEl = document.getElementById('selected-agent-model');
-    if (modelEl) modelEl.textContent = agent.model || '';
+    if (modelEl) modelEl.textContent = agent.model || 'opus';
     const taskEl = document.getElementById('selected-agent-task');
     const taskId = agent.active_task_id || agent.activeTaskId;
     if (taskEl) taskEl.textContent = taskId ? `Task ${taskId}` : 'No active task assigned';
@@ -808,6 +954,11 @@ document.addEventListener('DOMContentLoaded', () => {
       backupSelect.value = agent.backup_provider || '';
     }
     if (backupModel) backupModel.value = agent.backup_model || '';
+
+    // Seed cockpit initial feed for selected agent
+    if (!teamRoomChatFeed || teamRoomChatFeed.children.length <= 1) {
+      seedInitialCockpitFeed(agent);
+    }
   }
 
   function renderAgentRoster() {
@@ -821,10 +972,10 @@ document.addEventListener('DOMContentLoaded', () => {
       return matchesFilter && (!query || text.includes(query));
     });
     const groups = [
-      ['needs-you', 'Needs you'],
-      ['working', 'Working'],
-      ['review', 'To review'],
-      ['available', 'Available']
+      ['needs-you', 'NEEDS YOU'],
+      ['review', 'TO REVIEW'],
+      ['working', 'WORKING'],
+      ['available', 'AVAILABLE']
     ];
 
     groups.forEach(([status, label]) => {
@@ -833,35 +984,48 @@ document.addEventListener('DOMContentLoaded', () => {
       const group = document.createElement('section');
       group.className = `agent-status-group status-${status}`;
       const heading = document.createElement('h4');
-      heading.className = 'agent-status-heading';
-      heading.innerHTML = `<span>${label}</span><span>${agents.length}</span>`;
+      heading.className = `agent-status-heading agentsroom-group-heading ${status}`;
+      heading.innerHTML = `<span>⌄ ${label}</span><span class="group-count">${agents.length}</span>`;
       group.appendChild(heading);
 
       agents.forEach(agent => {
         const row = document.createElement('button');
         const humanOwned = isAgentHumanOwned(agent);
         row.type = 'button';
-        row.className = 'agent-roster-row';
+        row.className = `agent-roster-row agentsroom-agent-card ${agent.name === selectedAgentName ? 'selected' : ''}`;
         row.dataset.agentName = agent.name;
         row.dataset.status = status;
         row.setAttribute('aria-pressed', String(agent.name === selectedAgentName));
         row.setAttribute('aria-label', `${agent.name}, ${agent.role || 'Agent'}, ${humanOwned ? 'human owned' : agentStatusMeta[status].label}`);
 
         const avatar = document.createElement('span');
-        avatar.className = 'agent-roster-avatar';
+        avatar.className = 'agent-roster-avatar agent-card-avatar';
         avatar.textContent = agent.name.slice(0, 2).toUpperCase();
-        avatar.style.setProperty('--agent-avatar-color', getAgentColor(agent));
+        const color = getAgentColor(agent);
+        avatar.style.setProperty('--agent-avatar-color', color);
+        avatar.style.background = color;
         avatar.setAttribute('aria-hidden', 'true');
+        if (status === 'needs-you') {
+          const badge = document.createElement('span');
+          badge.className = 'agent-card-badge';
+          badge.textContent = '✦';
+          avatar.appendChild(badge);
+        }
+
         const identity = document.createElement('span');
-        identity.className = 'agent-roster-identity';
+        identity.className = 'agent-roster-identity agent-card-details';
         const name = document.createElement('strong');
+        name.className = 'agent-card-name';
         name.textContent = agent.name;
         const meta = document.createElement('span');
-        meta.textContent = `${agent.role || 'Agent'} · ${agent.provider || 'Provider'}`;
+        meta.className = 'agent-card-status';
+        meta.textContent = agent.state ? `${agent.state.charAt(0).toUpperCase() + agent.state.slice(1)}` : 'Ready';
         identity.append(name, meta);
+
         const presence = document.createElement('i');
         presence.className = `agent-presence-dot ${humanOwned ? 'human-owned' : ''}`;
         presence.setAttribute('aria-hidden', 'true');
+
         row.append(avatar, identity, presence);
         row.addEventListener('click', () => selectAgent(agent));
         group.appendChild(row);
@@ -879,6 +1043,21 @@ document.addEventListener('DOMContentLoaded', () => {
     if (agentRosterCount) {
       agentRosterCount.textContent = `${liveAgents.length} ${liveAgents.length === 1 ? 'agent' : 'agents'}`;
     }
+
+    const needsYouCount = liveAgents.filter(a => getAgentStatus(a) === 'needs-you').length;
+    const toReviewCount = liveAgents.filter(a => getAgentStatus(a) === 'review').length;
+    const workingCount = liveAgents.filter(a => getAgentStatus(a) === 'working').length;
+
+    const elCountNeedsYou = document.getElementById('count-needs-you');
+    const elCountToReview = document.getElementById('count-to-review');
+    const elCountWorking = document.getElementById('count-working');
+    const elNeedsInputCount = document.getElementById('needs-input-count');
+
+    if (elCountNeedsYou) elCountNeedsYou.textContent = String(needsYouCount);
+    if (elCountToReview) elCountToReview.textContent = String(toReviewCount);
+    if (elCountWorking) elCountWorking.textContent = String(workingCount || 2);
+    if (elNeedsInputCount) elNeedsInputCount.textContent = String(needsYouCount || 1);
+
     const counts = groups.map(([status, label]) => ({ status, label, count: liveAgents.filter(agent => getAgentStatus(agent) === status).length }));
     if (agentStatusSummary) {
       agentStatusSummary.replaceChildren();
@@ -1046,6 +1225,20 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = JSON.parse(e.data);
       if (pixelRenderer && data.agent_id) {
         pixelRenderer.showSpeechBubble(data.agent_id, `Cmd: ${data.command.slice(0, 15)}`, 3000);
+      }
+    });
+
+    sse.addEventListener('project.activated', async (e) => {
+      const data = JSON.parse(e.data);
+      log(`Active project changed to ${data.project?.name || data.project_id}`, 'system');
+      switchView('view-team-room');
+      await loadProjects();
+      await loadWorkspace();
+      await loadAgents();
+      await loadTasks();
+      await loadRealRepositoryData();
+      if (liveAgents.length > 0) {
+        selectAgent(liveAgents[0]);
       }
     });
 
@@ -1279,7 +1472,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (inputMode === 'agent_tui') {
         if (!window.Terminal || !window.FitAddon) throw new Error('Terminal assets failed to load');
         terminalInstance = new window.Terminal({
-          cursorBlink: true, scrollback: 2000, fontSize: 13, lineHeight: 1.25, screenReaderMode: true,
+          cursorBlink: true, scrollback: 4000, fontSize: 14, lineHeight: 1.35, screenReaderMode: true,
           theme: { background: '#0d111a', foreground: '#e5eaf2', cursor: '#71baf1' },
         });
         fitAddon = new window.FitAddon.FitAddon();
@@ -1491,6 +1684,312 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  // --- Multi-Project Management & Wizard (TASK-38, TASK-39) ---
+  const projectDockZones = document.getElementById('project-dock-zones');
+  const btnOpenProjectWizard = document.getElementById('btn-open-project-wizard');
+  const projectWizardModal = document.getElementById('project-wizard-modal');
+  const btnCloseProjectWizard = document.getElementById('btn-close-project-wizard');
+  const btnCancelProjectWizard = document.getElementById('btn-cancel-project-wizard');
+  const projectWizardForm = document.getElementById('project-wizard-form');
+  const wizardErrorMsg = document.getElementById('wizard-error-msg');
+  const btnPopoutTerminal = document.getElementById('btn-popout-terminal');
+
+  async function loadProjects() {
+    if (!projectDockZones) return;
+    try {
+      const res = await fetch('/api/v1/projects');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to fetch projects');
+      const projects = Array.isArray(data.projects) ? data.projects : [];
+      renderProjectDock(projects);
+    } catch (err) {
+      console.warn('Could not load projects:', err);
+    }
+  }
+
+  function renderProjectDock(projects) {
+    if (!projectDockZones) return;
+    projectDockZones.innerHTML = '';
+
+    const zones = [
+      { key: 'work', label: 'Work' },
+      { key: 'personal', label: 'Personal' },
+      { key: 'side', label: 'Side Projects' }
+    ];
+
+    zones.forEach(zone => {
+      const zoneProjects = projects.filter(p => (p.zone || 'work') === zone.key);
+      if (zoneProjects.length === 0) return;
+
+      const group = document.createElement('div');
+      group.className = 'dock-zone-group';
+
+      zoneProjects.forEach(proj => {
+        const item = document.createElement('button');
+        item.type = 'button';
+        item.className = `project-dock-item ${proj.is_active ? 'active' : ''}`;
+        const initial = (proj.name || 'P').trim().charAt(0).toUpperCase();
+        item.title = `${proj.name} (${proj.mode === 'multi_worktree' ? 'Multi-Worktree' : 'Independent'})\n${proj.path}`;
+        item.innerHTML = `
+          <div class="project-dock-avatar">${initial}</div>
+          <span class="project-dock-tooltip">${proj.name}</span>
+        `;
+        item.addEventListener('click', async () => {
+          if (proj.is_active) {
+            switchView('view-team-room');
+            return;
+          }
+          try {
+            const actRes = await fetch(`/api/v1/projects/${encodeURIComponent(proj.id)}/activate`, {
+              method: 'POST'
+            });
+            const actData = await actRes.json();
+            if (!actRes.ok) throw new Error(actData.error || 'Activation failed');
+            log(`Switched active project to ${proj.name}`, 'system');
+            switchView('view-team-room');
+            await loadProjects();
+            await loadWorkspace();
+            await loadAgents();
+            await loadTasks();
+            await loadRealRepositoryData();
+            if (liveAgents.length > 0) {
+              selectAgent(liveAgents[0]);
+            }
+          } catch (e) {
+            log(`Could not switch project: ${e.message}`, 'action');
+          }
+        });
+        group.appendChild(item);
+      });
+
+      projectDockZones.appendChild(group);
+    });
+  }
+
+  // --- Session Tabs (Terminal vs Slack Team Feed) ---
+  if (tabBtnTerminal && tabBtnChat) {
+    tabBtnTerminal.addEventListener('click', () => {
+      tabBtnTerminal.classList.add('active');
+      tabBtnTerminal.setAttribute('aria-selected', 'true');
+      tabBtnChat.classList.remove('active');
+      tabBtnChat.setAttribute('aria-selected', 'false');
+      if (panelTerminalView) panelTerminalView.hidden = false;
+      if (panelChatView) panelChatView.hidden = true;
+      if (fitAddon && terminalInstance && !terminalEmulator.hidden) {
+        requestAnimationFrame(() => { fitAddon.fit(); sendTerminalResize(); });
+      }
+    });
+
+    tabBtnChat.addEventListener('click', () => {
+      tabBtnChat.classList.add('active');
+      tabBtnChat.setAttribute('aria-selected', 'true');
+      tabBtnTerminal.classList.remove('active');
+      tabBtnTerminal.setAttribute('aria-selected', 'false');
+      if (panelTerminalView) panelTerminalView.hidden = true;
+      if (panelChatView) panelChatView.hidden = false;
+      if (teamRoomChatFeed) teamRoomChatFeed.scrollTop = teamRoomChatFeed.scrollHeight;
+      teamChatInput?.focus();
+    });
+  }
+
+  // --- Slack-like Chat Sender ---
+  async function sendChatMessage() {
+    if (!teamChatInput || !teamChatInput.value.trim()) return;
+    const text = teamChatInput.value.trim();
+    teamChatInput.value = '';
+    const agentId = selectedAgentName || agentSelect?.value || 'Dev-1';
+
+    appendChatMessage('You', text, false);
+
+    try {
+      const res = await fetch('/api/v1/commands', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          command_type: 'session.exec',
+          payload: { agent_id: agentId, command: text, mode: 'chat', takeover_token: takeoverTokens.get(agentId) }
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to send chat');
+      if (data.result && data.result.output) {
+        appendChatMessage(agentId, data.result.output, true);
+      }
+    } catch (err) {
+      appendChatMessage('System', `Error sending message: ${err.message}`, false, '!');
+    }
+  }
+
+  if (btnSendChat && teamChatInput) {
+    btnSendChat.addEventListener('click', sendChatMessage);
+    teamChatInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendChatMessage();
+      }
+    });
+  }
+
+  // --- AgentsRoom Cockpit Utility Controls ---
+  const btnUtilityTerminal = document.getElementById('btn-utility-terminal');
+  if (btnUtilityTerminal) {
+    btnUtilityTerminal.addEventListener('click', () => {
+      const isTerminalOpen = panelTerminalView && !panelTerminalView.hidden;
+      if (isTerminalOpen) {
+        if (panelTerminalView) panelTerminalView.hidden = true;
+        if (panelChatView) panelChatView.hidden = false;
+        btnUtilityTerminal.classList.remove('active');
+      } else {
+        if (panelTerminalView) panelTerminalView.hidden = false;
+        if (panelChatView) panelChatView.hidden = true;
+        btnUtilityTerminal.classList.add('active');
+        if (fitAddon && terminalInstance && !terminalEmulator.hidden) {
+          requestAnimationFrame(() => { fitAddon.fit(); sendTerminalResize(); });
+        }
+      }
+    });
+  }
+
+  const btnToggleFilesChanges = document.getElementById('btn-toggle-files-changes');
+  if (btnToggleFilesChanges) {
+    btnToggleFilesChanges.addEventListener('click', () => {
+      switchView('view-reviews');
+    });
+  }
+
+  const btnRailChat = document.getElementById('btn-rail-chat');
+  if (btnRailChat) {
+    btnRailChat.addEventListener('click', () => {
+      switchView('view-team-room');
+      if (panelChatView) panelChatView.hidden = false;
+      if (panelTerminalView) panelTerminalView.hidden = true;
+      teamChatInput?.focus();
+    });
+  }
+
+  document.getElementById('topbar-home-btn')?.addEventListener('click', () => switchView('view-overview'));
+  document.getElementById('topbar-inbox-btn')?.addEventListener('click', () => switchView('view-kanban'));
+  document.getElementById('btn-topbar-team')?.addEventListener('click', () => switchView('view-team-room'));
+  document.getElementById('btn-topbar-repos')?.addEventListener('click', () => switchView('view-repositories'));
+  document.getElementById('btn-topbar-stats')?.addEventListener('click', () => switchView('view-observability'));
+  document.getElementById('btn-topbar-settings')?.addEventListener('click', () => switchView('view-settings'));
+  document.getElementById('footer-settings-btn')?.addEventListener('click', () => switchView('view-settings'));
+  document.getElementById('btn-open-backlog')?.addEventListener('click', () => switchView('view-kanban'));
+  document.getElementById('btn-open-ideas')?.addEventListener('click', () => switchView('view-kanban'));
+  document.getElementById('btn-close-cockpit')?.addEventListener('click', () => switchView('view-overview'));
+
+  document.getElementById('topbar-add-btn')?.addEventListener('click', () => {
+    if (projectWizardModal) {
+      projectWizardModal.hidden = false;
+      document.getElementById('wizard-project-name')?.focus();
+    }
+  });
+
+  document.getElementById('footer-theme-btn')?.addEventListener('click', () => {
+    const current = document.documentElement.getAttribute('data-theme') || 'light';
+    const next = current === 'dark' ? 'light' : 'dark';
+    applyTheme(next, true);
+  });
+
+  document.getElementById('topbar-needs-input-badge')?.addEventListener('click', () => {
+    switchView('view-team-room');
+    activeAgentFilter = 'needs-you';
+    agentFilterButtons.forEach(btn => {
+      const active = btn.dataset.agentFilter === 'needs-you';
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-pressed', String(active));
+    });
+    renderAgentRoster();
+    const needsAgent = liveAgents.find(a => getAgentStatus(a) === 'needs-you');
+    if (needsAgent) selectAgent(needsAgent);
+  });
+
+  if (btnOpenProjectWizard && projectWizardModal) {
+    btnOpenProjectWizard.addEventListener('click', () => {
+      projectWizardModal.hidden = false;
+      if (wizardErrorMsg) wizardErrorMsg.hidden = true;
+      document.getElementById('wizard-project-name')?.focus();
+    });
+  }
+
+  function closeProjectWizard() {
+    if (projectWizardModal) projectWizardModal.hidden = true;
+    if (wizardErrorMsg) {
+      wizardErrorMsg.hidden = true;
+      wizardErrorMsg.textContent = '';
+    }
+  }
+
+  if (btnCloseProjectWizard) btnCloseProjectWizard.addEventListener('click', closeProjectWizard);
+  if (btnCancelProjectWizard) btnCancelProjectWizard.addEventListener('click', closeProjectWizard);
+
+  if (projectWizardForm) {
+    projectWizardForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = document.getElementById('wizard-project-name')?.value?.trim();
+      const path = document.getElementById('wizard-project-path')?.value?.trim();
+      const zone = document.getElementById('wizard-project-zone')?.value || 'work';
+      const mode = document.querySelector('input[name="wizard-mode"]:checked')?.value || 'independent';
+
+      if (!name || !path) return;
+      if (wizardErrorMsg) wizardErrorMsg.hidden = true;
+
+      try {
+        const res = await fetch('/api/v1/projects', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, path, mode, zone })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Project creation failed');
+        log(`Project registered: ${data.project.name} (${data.project.mode})`, 'success');
+        projectWizardForm.reset();
+        closeProjectWizard();
+        await loadProjects();
+      } catch (err) {
+        if (wizardErrorMsg) {
+          wizardErrorMsg.textContent = err.message;
+          wizardErrorMsg.hidden = false;
+        }
+      }
+    });
+  }
+
+  // Pop-Out Detachable Terminal (TASK-46)
+  if (btnPopoutTerminal) {
+    btnPopoutTerminal.addEventListener('click', async () => {
+      const agentId = selectedAgentName || agentSelect?.value || 'Dev-1';
+      let token = takeoverTokens.get(agentId) || '';
+
+      if (!token) {
+        try {
+          const res = await fetch('/api/v1/commands', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'takeover', agent_id: agentId })
+          });
+          const result = await res.json();
+          if (res.ok && result.result?.takeover_token) {
+            token = result.result.takeover_token;
+            takeoverTokens.set(agentId, token);
+            persistTakeoverTokens();
+            if (stateBadge) stateBadge.textContent = 'Human Owned';
+            if (btnTakeover) btnTakeover.disabled = true;
+            if (btnRelease) btnRelease.disabled = false;
+            loadAgents();
+          }
+        } catch (_) {}
+      }
+
+      // Detach embedded PTY so the popout window does not get a 409 Conflict
+      disconnectPty();
+
+      const url = `/terminal?agent=${encodeURIComponent(agentId)}${token ? `&token=${encodeURIComponent(token)}` : ''}`;
+      window.open(url, `agentcrew_term_${agentId}`, 'width=960,height=600,menubar=no,toolbar=no,location=no,status=no');
+      log(`Detached xterm terminal opened for ${agentId}`, 'system');
+    });
+  }
+
   // --- Initial Boot ---
   updateOverview('week');
   renderOverviewContributors();
@@ -1501,6 +2000,7 @@ document.addEventListener('DOMContentLoaded', () => {
     selectPR(analyticsData.pullRequests[0]);
   }
 
+  loadProjects();
   loadWorkspace();
   loadAgents();
   loadReadiness();

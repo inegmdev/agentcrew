@@ -1,9 +1,13 @@
 ---
 id: TASK-31
 title: Code Review 'Ask Assistant' still returns templated answers
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-10-11 02:41'
+updated_date: '2026-10-18 21:48'
+completed_date: '2026-10-18 21:48'
+resolution: completed
+merged_pr: '#19'
 labels:
   - chat
   - review
@@ -21,7 +25,14 @@ Finding: agent.ask in supervisor-server.js still synthesizes canned text by keyw
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 agent.ask answers come from the provider CLI with PR diff/title/author as context
-- [ ] #2 Canned keyword branches deleted
-- [ ] #3 Drawer shows provider error (not fake text) when providers fail
+- [x] #1 agent.ask answers come from the provider CLI with PR diff/title/author as context
+- [x] #2 Canned keyword branches deleted
+- [x] #3 Drawer shows provider error (not fake text) when providers fail
 <!-- AC:END -->
+
+## Implementation Summary
+- `RepoDataService.getPullRequestReviewContext()` extracts actual PR metadata and diff via `gh` CLI.
+- `ChatService` feeds real PR context into the provider execution turn with live persona prompt.
+- Removed keyword-based mock synthesis; provider errors are faithfully surfaced in the UI review drawer.
+- Validated with unit & contract tests in `test/chat/chat-service.test.js` and `test/server/http-api.test.js`.
+

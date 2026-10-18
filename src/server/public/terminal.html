@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agent Terminal — AgentCrew</title>
+  <link rel="icon" type="image/jpeg" href="/logo.jpeg">
+  <link rel="stylesheet" href="/vendor/xterm.css">
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --card-bg: #111827;
+      --border: rgba(56, 189, 248, 0.15);
+      --accent: #0284c7;
+      --accent-cyan: #38bdf8;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .term-header {
+      background: var(--card-bg);
+      border-bottom: 1px solid var(--border);
+      padding: 8px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+    .term-identity {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .term-badge {
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--accent-cyan);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 600;
+      font-family: monospace;
+    }
+    .term-title {
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .term-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #10b981;
+      box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+    }
+    .status-dot.disconnected {
+      background: #ef4444;
+      box-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+    }
+    .term-container {
+      flex: 1;
+      padding: 10px;
+      background: #060911;
+      overflow: hidden;
+      position: relative;
+    }
+    .term-body {
+      width: 100%;
+      height: 100%;
+    }
+  </style>
+</head>
+<body>
+  <div class="term-header">
+    <div class="term-identity">
+      <span class="term-badge" id="agent-badge">AGENT</span>
+      <span class="term-title" id="agent-title">Agent Terminal</span>
+    </div>
+    <div class="term-status">
+      <span class="status-dot" id="status-dot"></span>
+      <span id="status-label">Connected</span>
+    </div>
+  </div>
+  <div class="term-container">
+    <div id="terminal-root" class="term-body"></div>
+  </div>
+
+  <script src="/vendor/xterm.js"></script>
+  <script src="/vendor/addon-fit.js"></script>
+  <script>
+    (async function() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const agentId = urlParams.get('agent') || urlParams.get('agent_id') || 'Dev-1';
+      let token = urlParams.get('token') || urlParams.get('takeover_token') || '';
+
+      // Check sessionStorage from parent window if token wasn't in URL
+      if (!token) {
+        try {
+          const stored = JSON.parse(sessionStorage.getItem('agentcrew.takeoverTokens') || '{}');
+          if (stored[agentId]) token = stored[agentId];
+        } catch (_) {}
+      }
+
+      document.getElementById('agent-badge').textContent = agentId.toUpperCase();
+      document.getElementById('agent-title').textContent = `${agentId} — Interactive PTY`;
+      document.title = `${agentId} (Detached Terminal) — AgentCrew`;
+
+      const statusDot = document.getElementById('status-dot');
+      const statusLabel = document.getElementById('status-label');
+
+      const term = new Terminal({
+        cursorBlink: true,
+        fontFamily: '"JetBrains Mono", Menlo, Consolas, monospace',
+        fontSize: 14,
+        lineHeight: 1.35,
+        theme: {
+          background: '#060911',
+          foreground: '#f1f5f9',
+          cursor: '#38bdf8',
+          selectionBackground: 'rgba(56, 189, 248, 0.3)',
+        }
+      });
+
+      const root = document.getElementById('terminal-root');
+      term.open(root);
+
+      let fitAddon = null;
+      if (typeof FitAddon !== 'undefined' && FitAddon.FitAddon) {
+        fitAddon = new FitAddon.FitAddon();
+        term.loadAddon(fitAddon);
+        try { fitAddon.fit(); } catch (_) {}
+      }
+
+      window.addEventListener('resize', () => {
+        if (fitAddon) {
+          try { fitAddon.fit(); } catch (_) {}
+        }
+      });
+
+      // If token is missing, attempt to acquire takeover for this agent automatically
+      if (!token) {
+        statusLabel.textContent = 'Acquiring takeover...';
+        term.write(`\x1b[90m[connecting] Requesting takeover token for ${agentId}...\x1b[0m\r\n`);
+        try {
+          const res = await fetch('/api/v1/commands', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'takeover', agent_id: agentId })
+          });
+          const result = await res.json();
+          if (res.ok && result.result?.takeover_token) {
+            token = result.result.takeover_token;
+            try {
+              const tokens = JSON.parse(sessionStorage.getItem('agentcrew.takeoverTokens') || '{}');
+              tokens[agentId] = token;
+              sessionStorage.setItem('agentcrew.takeoverTokens', JSON.stringify(tokens));
+            } catch (_) {}
+          } else {
+            term.write(`\r\n\x1b[31m[takeover required] Please take over ${agentId} in the main dashboard or retry.\x1b[0m\r\n`);
+          }
+        } catch (err) {
+          term.write(`\r\n\x1b[31m[error] Failed to acquire takeover: ${err.message}\x1b[0m\r\n`);
+        }
+      }
+
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${wsProtocol}//${window.location.host}/api/v1/pty?mode=agent_tui&agent_id=${encodeURIComponent(agentId)}&token=${encodeURIComponent(token)}`;
+      const ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        statusDot.classList.remove('disconnected');
+        statusLabel.textContent = 'Connected (Live PTY)';
+        if (fitAddon) fitAddon.fit();
+        ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const frame = JSON.parse(event.data);
+          if (frame.type === 'ready') {
+            statusDot.classList.remove('disconnected');
+            statusLabel.textContent = `Connected (${frame.provider || 'Live CLI'})`;
+            term.write(`\x1b[32m[connected to ${frame.provider || agentId} CLI session]\x1b[0m\r\n`);
+          } else if (frame.type === 'output') {
+            term.write(frame.data);
+          } else if (frame.type === 'error') {
+            term.write(`\r\n\x1b[31m[error] ${frame.data}\x1b[0m\r\n`);
+          }
+        } catch (_) {
+          term.write(event.data);
+        }
+      };
+
+      ws.onclose = () => {
+        statusDot.classList.add('disconnected');
+        statusLabel.textContent = 'Disconnected';
+        term.write('\r\n\x1b[33m[terminal session closed]\x1b[0m\r\n');
+      };
+
+      ws.onerror = () => {
+        statusDot.classList.add('disconnected');
+        statusLabel.textContent = 'Connection Error';
+      };
+
+      term.onData((data) => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'input', data }));
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

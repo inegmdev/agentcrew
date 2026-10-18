@@ -104,3 +104,76 @@ test('WorkspaceManager persists explicit backup settings and separate provider c
   assert.equal((await restarted.listAgents(project.id)).find((agent) => agent.name === 'QA-1').backup_provider, 'codex');
 });
 
+test('WorkspaceManager multi-project registry supports registration, isolation, and activation (TASK-37)', async () => {
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agentcrew-multi-project-'));
+  const projDir1 = fs.mkdtempSync(path.join(os.tmpdir(), 'agentcrew-proj-1-'));
+  const projDir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'agentcrew-proj-2-'));
+
+  const manager = new WorkspaceManager({ baseDir });
+
+  // List projects initially empty
+  const initial = await manager.listProjects();
+  assert.equal(initial.length, 0);
+
+  // Register Project 1
+  const p1 = await manager.registerProject({
+    path: projDir1,
+    name: 'Work Engine',
+    mode: 'independent',
+    zone: 'work'
+  });
+  assert.ok(p1.id);
+  assert.equal(p1.name, 'Work Engine');
+  assert.equal(p1.mode, 'independent');
+  assert.equal(p1.zone, 'work');
+  assert.equal(p1.is_active, true);
+
+  // Register Project 2
+  const p2 = await manager.registerProject({
+    path: projDir2,
+    name: 'Personal Hobby',
+    mode: 'multi_worktree',
+    zone: 'personal'
+  });
+  assert.ok(p2.id);
+  assert.equal(p2.name, 'Personal Hobby');
+  assert.equal(p2.is_active, false);
+
+  // Validation errors
+  await assert.rejects(manager.registerProject({ path: '/non/existent/path/xyz' }), /Target path does not exist/);
+  await assert.rejects(manager.registerProject({ path: projDir1, mode: 'invalid_mode' }), /Invalid project mode/);
+  await assert.rejects(manager.registerProject({ path: projDir1, zone: 'invalid_zone' }), /Invalid project zone/);
+
+  // List projects returns both
+  const list = await manager.listProjects();
+  assert.equal(list.length, 2);
+  const foundP1 = list.find(p => p.id === p1.id);
+  const foundP2 = list.find(p => p.id === p2.id);
+  assert.equal(foundP1.is_active, true);
+  assert.equal(foundP2.is_active, false);
+
+  // Activate Project 2
+  const activated = await manager.activateProject(p2.id);
+  assert.equal(activated.id, p2.id);
+  assert.equal(activated.is_active, true);
+
+  const activeNow = await manager.getActiveProject();
+  assert.equal(activeNow.id, p2.id);
+
+  const updatedList = await manager.listProjects();
+  assert.equal(updatedList.find(p => p.id === p1.id).is_active, false);
+  assert.equal(updatedList.find(p => p.id === p2.id).is_active, true);
+
+  // Isolation: session saved in p1 does not exist in p2
+  await manager.saveAgentSession(p1.id, 'Alice', { provider: 'agy', sessionId: 'p1-alice-session' });
+  const p1Alice = await manager.getAgentSession(p1.id, 'Alice');
+  const p2Alice = await manager.getAgentSession(p2.id, 'Alice');
+  assert.equal(p1Alice.sessionId, 'p1-alice-session');
+  assert.equal(p2Alice, null);
+
+  fs.rmSync(baseDir, { recursive: true, force: true });
+  fs.rmSync(projDir1, { recursive: true, force: true });
+  fs.rmSync(projDir2, { recursive: true, force: true });
+});
+
+

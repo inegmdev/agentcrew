@@ -116,10 +116,10 @@ class SupervisorServer {
       return;
     }
     if (parsedUrl.pathname === '/api/v1/pty') {
-      const requestedAgentId = parsedUrl.searchParams.get('agent_id') || 'Dev-1';
+      const requestedAgentId = parsedUrl.searchParams.get('agent_id') || parsedUrl.searchParams.get('agent') || 'Dev-1';
       const agentId = (await this.chatService.resolveAgent(requestedAgentId)).name;
-      const mode = parsedUrl.searchParams.get('mode') || 'chat';
-      const takeoverToken = parsedUrl.searchParams.get('token');
+      const takeoverToken = parsedUrl.searchParams.get('token') || parsedUrl.searchParams.get('takeover_token');
+      const mode = parsedUrl.searchParams.get('mode') || (takeoverToken ? 'agent_tui' : 'chat');
       if (!['agent_tui', 'shell'].includes(mode) || !this.takeoverController.validateToken(agentId, takeoverToken)) {
         socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
         socket.destroy();
@@ -428,6 +428,114 @@ class SupervisorServer {
         active_turn_limit: 4,
         public_http_warning: !['127.0.0.1', '::1', 'localhost'].includes(this.host),
       });
+    }
+
+    if (pathname === '/api/v1/projects' && method === 'GET') {
+      const projects = this.workspace ? await this.workspace.listProjects() : [];
+      return this.jsonResponse(res, 200, { projects });
+    }
+
+    if (pathname === '/api/v1/projects' && method === 'POST') {
+      if (req.headers['content-type'] && !req.headers['content-type'].includes('application/json')) {
+        return this.jsonResponse(res, 415, { error: 'Content-Type must be application/json' });
+      }
+      try {
+        const body = await this.readJsonBody(req);
+        if (!this.workspace) {
+          return this.jsonResponse(res, 500, { error: 'Workspace manager not initialized' });
+        }
+        const project = await this.workspace.registerProject(body);
+        return this.jsonResponse(res, 201, { project });
+      } catch (err) {
+        return this.jsonResponse(res, err.statusCode || 400, { error: err.message });
+      }
+    }
+
+    const activateMatch = pathname.match(/^\/api\/v1\/projects\/([^/]+)\/activate$/);
+    if (activateMatch && method === 'POST') {
+      const targetId = activateMatch[1];
+      try {
+        if (!this.workspace) {
+          return this.jsonResponse(res, 500, { error: 'Workspace manager not initialized' });
+        }
+        const project = await this.workspace.activateProject(targetId);
+        this.projectId = project.id;
+        this.projectName = project.name;
+        this.repoPath = project.path;
+        if (this.chatService) {
+          this.chatService.projectId = project.id;
+          this.chatService.repoPath = project.path;
+        }
+        this.broadcastEvent('project.activated', { project });
+        return this.jsonResponse(res, 200, { success: true, project });
+      } catch (err) {
+        return this.jsonResponse(res, err.statusCode || 400, { error: err.message });
+      }
+    }
+
+    if (pathname === '/api/v1/room/messages' && method === 'GET') {
+      const channel = parsedUrl.searchParams.get('channel') || 'team-activity';
+      const messages = this.workspace && this.projectId ? await this.workspace.listRoomMessages(this.projectId, { channel }) : [];
+      return this.jsonResponse(res, 200, { messages });
+    }
+
+    if (pathname === '/api/v1/room/messages' && method === 'POST') {
+      try {
+        const body = await this.readJsonBody(req);
+        if (!this.workspace || !this.projectId) {
+          return this.jsonResponse(res, 400, { error: 'No active project' });
+        }
+        const message = await this.workspace.addRoomMessage(this.projectId, {
+          channel: body.channel || 'team-activity',
+          senderType: body.sender_type || 'human',
+          senderId: body.sender_id || 'operator',
+          senderName: body.sender_name || 'Operator',
+          text: body.text,
+          metadata: body.metadata || null
+        });
+        this.broadcastEvent('room.message', message);
+
+        const mentionMatch = body.text && body.text.match(/@([a-zA-Z0-9_\-]+)/);
+        if (mentionMatch && this.chatService) {
+          const mentioned = mentionMatch[1];
+          const agents = await this.workspace.listAgents(this.projectId);
+          const targetAgent = agents.find(a => a.name.toLowerCase() === mentioned.toLowerCase() || a.id === mentioned);
+          if (targetAgent) {
+            setImmediate(async () => {
+              try {
+                this.broadcastEvent('agent.thinking_started', { agent_id: targetAgent.name });
+                const prompt = body.text.replace(mentionMatch[0], '').trim() || 'Please follow up on the team discussion.';
+                const answer = await this.chatService.generateResponse(targetAgent.name, prompt);
+                const replyMessage = await this.workspace.addRoomMessage(this.projectId, {
+                  channel: body.channel || 'team-activity',
+                  senderType: 'agent',
+                  senderId: targetAgent.id,
+                  senderName: targetAgent.name,
+                  text: answer,
+                  metadata: { in_reply_to: message.id, agent_role: targetAgent.role }
+                });
+                this.broadcastEvent('room.message', replyMessage);
+              } catch (err) {
+                const errorMessage = await this.workspace.addRoomMessage(this.projectId, {
+                  channel: body.channel || 'team-activity',
+                  senderType: 'system',
+                  senderId: 'system',
+                  senderName: 'System',
+                  text: `Failed to dispatch turn to ${targetAgent.name}: ${err.message}`,
+                  metadata: { error: true }
+                });
+                this.broadcastEvent('room.message', errorMessage);
+              } finally {
+                this.broadcastEvent('agent.thinking_ended', { agent_id: targetAgent.name });
+              }
+            });
+          }
+        }
+
+        return this.jsonResponse(res, 201, { message });
+      } catch (err) {
+        return this.jsonResponse(res, err.statusCode || 400, { error: err.message });
+      }
     }
 
     if (pathname === '/api/v1/readiness' && method === 'GET') {
@@ -746,7 +854,7 @@ class SupervisorServer {
       fs.createReadStream(asset).pipe(res);
       return;
     }
-    let filePath = pathname === '/' ? '/index.html' : pathname;
+    let filePath = pathname === '/' ? '/index.html' : (pathname === '/terminal' ? '/terminal.html' : pathname);
     const safePath = path.normalize(filePath).replace(/^(\.\.[\/\\])+/, '');
     const fullPath = path.join(this.staticDir, safePath);
 

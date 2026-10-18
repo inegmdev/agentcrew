@@ -33,6 +33,8 @@ test('SupervisorServer serves interactive Web UI dashboard bundle', async (t) =>
     assert.ok(html.includes('theme-toggle-btn'));
     assert.ok(html.includes('data-theme="light"'));
     assert.ok(html.includes('pixel-room-canvas'));
+    assert.ok(html.includes('data-input-mode="chat"'));
+    assert.ok(html.includes('data-input-mode="shell"'));
     assert.ok(html.includes('team-room-grid'));
     assert.ok(html.includes('kanban-board'));
     assert.ok(html.includes('view-overview'));
@@ -64,6 +66,8 @@ test('SupervisorServer serves interactive Web UI dashboard bundle', async (t) =>
     assert.ok(js.includes('/api/v1/workspace'));
     assert.ok(js.includes('agentcrew_theme'));
     assert.ok(js.includes('theme-toggle-btn'));
+    assert.ok(js.includes("let inputMode = 'chat'"));
+    assert.ok(js.includes('mode: inputMode'));
   });
 
   await t.test('GET /style.css returns dashboard stylesheets with light and dark themes', async () => {

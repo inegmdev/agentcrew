@@ -499,6 +499,10 @@ while human-owned would defeat the product and is explicitly replaced by source-
 dispatch and permission checks. A tool already running must finish, stop, or be marked
 uncertain before control is reported as safely acquired.
 
+The Takeover Console selects Chat or Shell explicitly, defaulting to Chat. A leading
+`!` forces one Shell command from Chat mode. Input routing does not infer intent from
+command names; the server enforces human ownership before executing any Shell input.
+
 ### 8.2 Runtime interface
 
 `spawn({argv, cwd, env, processNonce})` returns a handle with streams, process identity,

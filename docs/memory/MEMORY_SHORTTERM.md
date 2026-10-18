@@ -294,3 +294,8 @@ TASK-36 makes `agentcrew server` bind to `127.0.0.1` by default; `--host` is
 required for LAN binding. README documents LAN and email-protected Cloudflare Quick
 Tunnel access, and the repository convention requires PRs for `main`. Added a
 Linux pull-request workflow that runs `npm test`.
+
+TASK-33 adds explicit Chat/Shell input routing in the Takeover Console. Chat is the
+default; `!` forces one shell command. A shared `src/session/input-mode.js` resolver
+serves WebSocket and HTTP session execution, and the server requires `human_owned`
+before shell execution. PRD/TRD, UI, and routing/ownership tests updated.

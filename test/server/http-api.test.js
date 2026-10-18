@@ -47,6 +47,12 @@ test('SupervisorServer serves TRD §12 API routes and SSE stream', async (t) => 
     diffTruncated: false
   });
   server.chatService = {
+    resolveAgent: (agentId) => server.workspace.listAgents(server.projectId).then((agents) => {
+      const match = agents.find((agent) => agent.name.toLowerCase() === agentId.toLowerCase());
+      return { name: match?.name || agentId };
+    }),
+    async quiesceAgent() { return { quiescent: true }; },
+    resumeAgent() {},
     async generateResponse(agentId, prompt, options) {
       capturedReview = { agentId, prompt, options };
       if (providerFailure) throw new Error('codex: quota exceeded');

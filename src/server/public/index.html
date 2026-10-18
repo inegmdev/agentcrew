@@ -357,11 +357,13 @@
               <div id="takeover-terminal" class="terminal-log agent-session-output" aria-live="polite" aria-label="Agent session output">
                 <div class="term-line system">[System] Select an agent to inspect its session.</div>
               </div>
+              <div class="takeover-mode" role="group" aria-label="Input mode">
+                <span>Send as</span>
+                <button type="button" class="takeover-mode-button active" data-input-mode="chat" aria-pressed="true">Chat</button>
+                <button type="button" class="takeover-mode-button" data-input-mode="shell" aria-pressed="false">Shell</button>
+                <span class="takeover-mode-hint">Prefix with ! to run one shell command from Chat.</span>
+              </div>
               <div class="takeover-input-bar agent-composer">
-                <select id="agent-input-mode" aria-label="Agent input mode" disabled>
-                  <option value="chat">Chat with agent</option>
-                  <option value="shell">Shell command</option>
-                </select>
                 <input type="text" id="takeover-command-input" placeholder="Message the agent…" aria-label="Message or shell command" disabled>
                 <button id="btn-send-command" class="btn btn-sm btn-primary" type="button" disabled>Send</button>
               </div>

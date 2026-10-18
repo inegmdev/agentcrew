@@ -16,6 +16,7 @@ const { TurnScheduler } = require('../scheduler/turn-scheduler');
 const { ChatService } = require('../chat/chat-service');
 const { RepoDataService } = require('./repo-data-service');
 const { which } = require('../lib/shell');
+const { resolveInput } = require('../session/input-mode');
 
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -144,11 +145,13 @@ class SupervisorServer {
             return;
           }
           const parsed = typeof msg === 'string' ? JSON.parse(msg) : JSON.parse(msg.toString('utf8'));
-          if (parsed.type === 'input') ptySession.write(parsed.data || '');
-          else if (parsed.type === 'resize') {
+          if (parsed.type === 'input') {
+            const input = resolveInput(parsed.data, 'shell');
+            if (input.text) ptySession.write(`${input.text}\n`);
+          } else if (parsed.type === 'resize') {
             // resize event if available
           }
-        } catch (_) {
+        } catch (error) {
           ws.send(JSON.stringify({ type: 'error', data: 'Invalid shell input' }));
         }
       });
@@ -415,35 +418,35 @@ class SupervisorServer {
       } else if (command_type === 'session.exec' || command_type === 'session.command') {
         const requestedAgentId = payload.agent_id || 'Dev-1';
         const agentId = (await this.chatService.resolveAgent(requestedAgentId)).name;
-        const cmd = (payload.command || payload.instruction || '').trim();
-        const mode = payload.mode || 'chat';
+        const input = resolveInput(payload.command || payload.instruction, payload.mode);
         if (!this.takeoverController.validateToken(agentId, payload.takeover_token)) {
           throw Object.assign(new Error('Valid takeover token required'), { statusCode: 403, code: 'INVALID_TAKEOVER_TOKEN' });
         }
+        if (!input.text) throw Object.assign(new Error('Input is required'), { statusCode: 400 });
 
         let output = '';
-        if (mode === 'chat' && cmd.length > 0) {
+        if (input.mode === 'chat' && input.text.length > 0) {
           // Route dialogue directly to active Agent Persona reasoning
-          output = await this.chatService.generateResponse(agentId, cmd, { source: 'human' });
+          output = await this.chatService.generateResponse(agentId, input.text, { source: 'human' });
           this.broadcastEvent('agent_answered', {
             agent_id: agentId,
             pr_number: 'live',
-            question: cmd,
+            question: input.text,
             answer: output,
             cli_grounded: true,
             timestamp: new Date().toISOString()
           });
         } else {
           try {
-            if (mode !== 'shell') throw Object.assign(new Error('mode must be chat or shell'), { statusCode: 400 });
-            const execRes = await this.ptyManager.execute(cmd, { cwd: this.repoPath });
+            if (input.mode !== 'shell' || !input.text) throw Object.assign(new Error('A shell command is required'), { statusCode: 400 });
+            const execRes = await this.ptyManager.execute(input.text, { cwd: this.repoPath });
             output = execRes.stdout || execRes.stderr || `[Executed with exit code ${execRes.code}]`;
           } catch (e) {
             output = `[Command Error on ${agentId}]: ${e.message}`;
           }
         }
 
-        result = { agent_id: agentId, command: cmd, output, status: 'success' };
+        result = { agent_id: agentId, command: input.text, mode: input.mode, output, status: 'success' };
         this.broadcastEvent('command_executed', result);
       } else if (command_type === 'iteration.run') {
         const runner = new IterationRunner({

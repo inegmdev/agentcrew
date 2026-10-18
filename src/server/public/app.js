@@ -1039,8 +1039,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (cmdInput) cmdInput.disabled = false;
         if (btnSendCmd) btnSendCmd.disabled = false;
         if (cmdInput) cmdInput.focus();
-        if (inputMode) inputMode.disabled = false;
-        if (inputMode?.value === 'shell') connectPty(agentId);
+        if (inputMode === 'shell') connectPty(agentId);
         if (pixelRenderer) {
           pixelRenderer.showSpeechBubble(agentId, 'Operator Live Takeover', 8000);
         }
@@ -1074,7 +1073,6 @@ document.addEventListener('DOMContentLoaded', () => {
           cmdInput.value = '';
         }
         if (btnSendCmd) btnSendCmd.disabled = true;
-        if (inputMode) inputMode.disabled = true;
         loadAgents();
       } catch (err) {
         log(`Release failed: ${err.message}`, 'action');
@@ -1087,7 +1085,28 @@ document.addEventListener('DOMContentLoaded', () => {
   let ptySocket = null;
   const cmdInput = document.getElementById('takeover-command-input');
   const btnSendCmd = document.getElementById('btn-send-command');
-  const inputMode = document.getElementById('agent-input-mode');
+  const modeButtons = document.querySelectorAll('[data-input-mode]');
+  let inputMode = 'chat';
+
+  modeButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+      inputMode = button.dataset.inputMode === 'shell' ? 'shell' : 'chat';
+      modeButtons.forEach((candidate) => {
+        const selected = candidate.dataset.inputMode === inputMode;
+        candidate.classList.toggle('active', selected);
+        candidate.setAttribute('aria-pressed', String(selected));
+      });
+      if (cmdInput) {
+        cmdInput.placeholder = inputMode === 'shell'
+          ? 'Enter a shell command…'
+          : 'Message your teammate… (prefix with ! to run a command)';
+      }
+      disconnectPty();
+      if (inputMode === 'shell' && !btnRelease.disabled) {
+        connectPty(selectedAgentName || agentSelect?.value || 'Dev-1');
+      }
+    });
+  });
 
   function connectPty(agentId) {
     if (ptySocket) {
@@ -1126,6 +1145,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 log(trimmed);
               }
             });
+          } else if (msg.type === 'error') {
+            log(msg.data, 'action');
           }
         } catch (_) {
           log(event.data);
@@ -1152,17 +1173,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  inputMode?.addEventListener('change', () => {
-    disconnectPty();
-    if (inputMode.value === 'shell' && !btnRelease.disabled) {
-      const agentId = selectedAgentName || agentSelect?.value || 'Dev-1';
-      connectPty(agentId);
-      if (cmdInput) cmdInput.placeholder = 'Enter a shell command…';
-    } else if (cmdInput) {
-      cmdInput.placeholder = 'Message the agent…';
-    }
-  });
-
   async function executeOperatorCommand() {
     if (!cmdInput || !cmdInput.value.trim()) return;
     const commandText = cmdInput.value.trim();
@@ -1171,8 +1181,8 @@ document.addEventListener('DOMContentLoaded', () => {
     log(`[Operator > ${agentId}]$ ${commandText}`, 'action');
     cmdInput.value = '';
 
-    if (inputMode?.value === 'shell' && ptySocket && ptySocket.readyState === WebSocket.OPEN) {
-      ptySocket.send(JSON.stringify({ type: 'input', data: `${commandText}\n` }));
+    if (inputMode === 'shell' && ptySocket && ptySocket.readyState === WebSocket.OPEN) {
+      ptySocket.send(JSON.stringify({ type: 'input', data: `${commandText}\n`, mode: 'shell' }));
     } else {
       // Fallback to HTTP command dispatch
       try {
@@ -1181,7 +1191,7 @@ document.addEventListener('DOMContentLoaded', () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             command_type: 'session.exec',
-            payload: { agent_id: agentId, command: commandText, mode: inputMode?.value || 'chat', takeover_token: takeoverTokens.get(agentId) }
+            payload: { agent_id: agentId, command: commandText, mode: inputMode, takeover_token: takeoverTokens.get(agentId) }
           })
         });
         const data = await res.json();

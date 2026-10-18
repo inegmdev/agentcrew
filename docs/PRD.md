@@ -354,9 +354,11 @@ created. Decisions affecting others become visible handoffs or change proposals.
 
 **PRD-CTRL-02 — Takeover.** Request takeover, display pausing, then grant exclusive
 human control after autonomous execution is stopped or safely reconciled. Human
-messages may drive the agent's tools under the effective permission policy. Handback
-records guidance and rechecks assignment validity. If safe takeover fails, show a
-blocked state; do not claim control while autonomous work continues.
+messages may drive the agent's tools under the effective permission policy. The
+Takeover Console offers explicit Chat and Shell modes, defaults to Chat, and allows a
+`!` prefix to force one shell command. Shell execution requires human ownership.
+Handback records guidance and rechecks assignment validity. If safe takeover fails,
+show a blocked state; do not claim control while autonomous work continues.
 
 Takeover is scoped to one agent. Concurrent requests for that agent conflict. Only
 the acquiring tab's session token may send takeover chat, release control, or open

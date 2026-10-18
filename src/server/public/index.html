@@ -9,9 +9,71 @@
   <link rel="stylesheet" href="/vendor/xterm.css">
 </head>
 <body>
-  <div id="remote-http-warning" class="remote-http-warning" role="alert" hidden>
-    Remote HTTP is unauthenticated. Anyone who can reach this port can control agent CLIs and run shell commands.
+  <!-- Dismissible Security Toast Notification -->
+  <div id="remote-http-warning" class="remote-http-warning toast-notification" role="alert" hidden>
+    <div class="toast-content">
+      <span class="toast-icon" aria-hidden="true">⚠️</span>
+      <div class="toast-message">
+        <strong class="toast-title">Security Notice:</strong> Remote HTTP is unauthenticated. Anyone who can reach this port can control agent CLIs and run shell commands.
+      </div>
+    </div>
+    <button type="button" class="toast-close-btn" id="btn-dismiss-remote-warning" aria-label="Dismiss security notification" title="Dismiss notification">✕</button>
   </div>
+
+  <!-- AgentsRoom Top Navigation Bar -->
+  <header class="agentsroom-topbar" id="agentsroom-topbar" aria-label="Global header">
+    <div class="topbar-left">
+      <button class="topbar-btn" id="topbar-home-btn" title="Overview (Home)" type="button">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
+      </button>
+      <button class="topbar-btn" id="topbar-inbox-btn" title="Kanban & Intake" type="button">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"></polyline><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path></svg>
+      </button>
+      <div class="topbar-brand-chip" title="AgentCrew Workspace">
+        <img src="/logo.jpeg" alt="AgentCrew Logo" class="topbar-logo-img">
+      </div>
+      <button class="topbar-sparkle-pill" id="topbar-sparkle-pill" type="button" title="Active Turns">
+        <span class="sparkle-star">✦</span>
+        <span class="sparkle-num" id="topbar-turns-count">1</span>
+      </button>
+      <button class="topbar-btn dashed-add" id="topbar-add-btn" title="Add / Switch Project" type="button">+</button>
+
+      <div class="topbar-project-pill" id="topbar-project-pill">
+        <span class="project-pill-name" id="topbar-project-name">AgentCrew</span>
+        <div class="project-pill-meta">
+          <button class="pill-meta-btn" id="btn-topbar-team" title="Team Room" type="button">🗨 <span id="topbar-chat-count">1</span></button>
+          <button class="pill-meta-btn" id="btn-topbar-repos" title="Repositories" type="button">📁</button>
+          <button class="pill-meta-btn" id="btn-topbar-stats" title="Observability" type="button">📊</button>
+          <button class="pill-meta-btn" id="btn-topbar-settings" title="Settings" type="button">⚙️</button>
+        </div>
+      </div>
+
+      <div class="topbar-needs-input-badge" id="topbar-needs-input-badge" title="Filter to agents requiring operator input">
+        <span class="status-dot-red">●</span>
+        <span class="needs-input-text"><strong id="needs-input-count">1</strong> needs input</span>
+      </div>
+    </div>
+
+    <div class="topbar-right">
+      <div class="topbar-search-box">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        <input type="search" placeholder="Search agents, tasks, PRs…" id="topbar-search-input" autocomplete="off">
+        <kbd>/</kbd>
+      </div>
+      <button class="topbar-icon-btn" id="topbar-team-btn" title="Toggle Team Sidebar" type="button"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg></button>
+      <button class="topbar-icon-btn topbar-help-btn" id="topbar-help-btn" title="Help & Docs" type="button"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg> <span>Help</span></button>
+      <button class="topbar-assistant-btn" id="topbar-assistant-btn" type="button" title="Operator AI Assistant">
+        <div class="assistant-avatar-sm">🤖</div>
+        <span>Assistant</span>
+      </button>
+      <div class="topbar-user-profile">
+        <div class="topbar-user-avatar">H</div>
+        <span class="topbar-user-name">Human Operator</span>
+        <span class="pro-badge">PRO</span>
+      </div>
+    </div>
+  </header>
+
   <div class="app-shell">
     <header class="mobile-app-bar" aria-label="Mobile application header">
       <button class="mobile-icon-btn" id="mobile-menu-btn" type="button" aria-label="Open navigation" aria-controls="app-sidebar" aria-expanded="false">
@@ -31,6 +93,22 @@
 
     <button class="sidebar-backdrop" id="sidebar-backdrop" type="button" aria-label="Close navigation" tabindex="-1"></button>
 
+    <!-- Leftmost Multi-Project Dock (TASK-38) -->
+    <aside class="project-dock" id="project-dock" aria-label="Projects Dock">
+      <div class="project-dock-brand" title="AgentCrew Workspace">
+        <img src="/logo.jpeg" alt="Logo" class="project-dock-logo">
+      </div>
+      <div class="project-dock-divider"></div>
+      <div class="project-dock-zones" id="project-dock-zones">
+        <!-- Rendered dynamically by app.js: Work, Personal, Side Projects -->
+      </div>
+      <div class="project-dock-bottom">
+        <button class="project-dock-add-btn" id="btn-open-project-wizard" type="button" title="Connect / Create Project" aria-label="Add Project">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        </button>
+      </div>
+    </aside>
+
     <!-- Left Sidebar Navbar -->
     <aside class="app-sidebar" id="app-sidebar">
       <div class="sidebar-top">
@@ -39,7 +117,7 @@
             <img src="/logo.jpeg" alt="AgentCrew Logo" class="brand-logo-img">
           </div>
           <div class="brand-text">
-            <span class="brand-title">AgentCrew</span>
+            <span class="brand-title" id="brand-title">AgentCrew</span>
             <span class="brand-sub">AI Team Workspace</span>
           </div>
           <button class="mobile-sidebar-close" id="mobile-sidebar-close" type="button" aria-label="Close navigation">
@@ -281,67 +359,188 @@
         </div>
       </section>
 
-      <!-- VIEW 1: Agent Room Cockpit -->
+      <!-- VIEW 1: Agent Room Cockpit (AgentsRoom Layout) -->
       <section id="view-team-room" class="fullscreen-view">
-        <div class="view-header">
+        <div class="view-header cockpit-subtle-header">
           <div class="header-titles">
             <h2>Agent Room</h2>
-            <p class="subtitle">Your team, live sessions, and human controls in one workspace.</p>
+            <p class="subtitle">Your autonomous team, live tool executions, and interactive cockpit.</p>
           </div>
           <div class="view-controls">
             <button id="toggle-pixel-view" class="btn btn-sm btn-secondary" type="button" aria-expanded="false" aria-controls="room-map-view">Open room map</button>
           </div>
         </div>
 
-        <div class="team-room-layout">
+        <div class="team-room-layout agentsroom-layout">
+          <!-- Left Sidebar: Agent Roster & Quick Tools -->
           <aside class="agent-roster-panel card" aria-label="Agent roster">
-            <div class="agent-roster-heading">
-              <div>
-                <h3>Team</h3>
-                <span id="agent-roster-count" class="subtitle">Loading agents…</span>
+            <!-- Project Assistant Card -->
+            <div class="roster-assistant-card" id="roster-assistant-card">
+              <div class="assistant-avatar-wrap">
+                <div class="assistant-avatar">🤖</div>
+                <span class="assistant-star-badge">✦</span>
               </div>
-              <span class="live-presence"><i></i> Live</span>
+              <div class="assistant-info">
+                <strong class="assistant-title" id="project-assistant-title">AgentCrew assistant</strong>
+                <span class="assistant-subtitle">Autonomous Lead · Active</span>
+              </div>
             </div>
-            <div class="agent-status-summary" id="agent-status-summary" aria-label="Agent status counts"></div>
-            <label class="agent-search-wrap" for="agent-search">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m16 16 4 4"></path></svg>
+
+            <!-- Ideas and Planning -->
+            <div class="roster-section-label">IDEAS AND PLANNING</div>
+            <div class="ideas-planning-row">
+              <div class="ideas-card" id="btn-open-ideas" title="Idea Radar">
+                <div class="ideas-header">
+                  <span class="ideas-icon">💡</span>
+                  <strong class="ideas-count" id="idea-radar-count">15</strong>
+                  <span class="ideas-dot">●</span>
+                </div>
+                <span class="ideas-label">Idea Radar</span>
+              </div>
+              <div class="ideas-card" id="btn-open-backlog" title="View Backlog Tasks">
+                <div class="ideas-header">
+                  <span class="ideas-icon">📋</span>
+                  <strong class="ideas-count" id="backlog-tasks-count">7</strong>
+                </div>
+                <span class="ideas-label">Backlog</span>
+              </div>
+            </div>
+
+            <!-- Running Agents Status Bar -->
+            <div class="roster-section-label roster-label-row">
+              <span>RUNNING AGENTS</span>
+              <button class="roster-play-btn" title="Autonomous turn scheduler" type="button">▶</button>
+            </div>
+            <div class="agent-status-summary running-agents-summary" id="agent-status-summary" aria-label="Agent status counts">
+              <div class="status-summary-item needs-you">
+                <span class="dot-red">●</span>
+                <strong id="count-needs-you">1</strong>
+                <span>Needs you</span>
+              </div>
+              <div class="status-summary-item to-review">
+                <span class="dot-green">●</span>
+                <strong id="count-to-review">1</strong>
+                <span>To review</span>
+              </div>
+              <div class="status-summary-item working">
+                <span class="dot-yellow">●</span>
+                <strong id="count-working">2</strong>
+                <span>Working</span>
+              </div>
+            </div>
+
+            <!-- Search Wrap -->
+            <div class="roster-search-bar">
+              <span class="search-icon">🔍</span>
               <input id="agent-search" type="search" placeholder="Search agents…" autocomplete="off">
-              <kbd>/</kbd>
-            </label>
-            <div class="agent-roster-filters" role="group" aria-label="Filter agents">
-              <button type="button" class="agent-filter active" data-agent-filter="all" aria-pressed="true">All</button>
-              <button type="button" class="agent-filter" data-agent-filter="needs-you" aria-pressed="false">Needs you</button>
-              <button type="button" class="agent-filter" data-agent-filter="working" aria-pressed="false">Working</button>
+              <button class="roster-search-action" id="btn-search-history" title="Search history" type="button">🕒</button>
+              <button class="roster-search-action" id="btn-search-ai" title="AI Agent lookup" type="button">✨</button>
             </div>
+
+            <!-- Filter Pills & Quick Icons -->
+            <div class="roster-filter-row">
+              <div class="agent-roster-filters" role="group" aria-label="Filter agents">
+                <button type="button" class="agent-filter active" data-agent-filter="all" aria-pressed="true">
+                  <span class="filter-icon">⚡</span> Activity
+                </button>
+                <button type="button" class="agent-filter" data-agent-filter="groups" aria-pressed="false">
+                  <span class="filter-icon">⊞</span> Groups
+                </button>
+                <button type="button" class="agent-filter" data-agent-filter="needs-you" aria-pressed="false" hidden>Needs you</button>
+                <button type="button" class="agent-filter" data-agent-filter="working" aria-pressed="false" hidden>Working</button>
+              </div>
+              <div class="roster-quick-icons">
+                <button class="icon-tiny" title="Pin selected" type="button">📌</button>
+                <button class="icon-tiny" title="Broadcast" type="button">📢</button>
+                <button class="icon-tiny" title="Turbo turns" type="button">⚡</button>
+                <button class="icon-tiny star-btn" title="Starred crew" type="button">✦</button>
+                <button class="icon-tiny plus-btn" title="Add specialist" type="button">+</button>
+              </div>
+            </div>
+
+            <span id="agent-roster-count" class="subtitle" hidden>Loading agents…</span>
+
+            <!-- Categorized Agent List Container (TASK-44) -->
             <div id="team-room-grid" class="agent-roster-list" aria-label="Agents"></div>
+
+            <!-- Bottom Tools & Knowledge Dock inside Sidebar -->
+            <div class="roster-bottom-dock">
+              <div class="dock-tabs-header">
+                <button class="dock-tab-btn active" id="dock-tab-tools" type="button">TOOLS</button>
+                <button class="dock-tab-btn" id="dock-tab-knowledge" type="button">KNOWLEDGE</button>
+              </div>
+              <div class="dock-icons-strip">
+                <button class="dock-icon-item" title="Terminal" type="button"><span class="icon">&gt;_</span></button>
+                <button class="dock-icon-item" title="Signals" type="button"><span class="icon">📶</span><span class="badge-dot badge-amber">5</span></button>
+                <button class="dock-icon-item" title="Mail" type="button"><span class="icon">✉</span></button>
+                <button class="dock-icon-item" title="Alerts" type="button"><span class="icon">🔔</span></button>
+                <button class="dock-icon-item" title="Knowledge Base" type="button"><span class="icon">🧠</span><span class="badge-dot badge-orange">13</span></button>
+                <button class="dock-icon-item" title="Snippets" type="button"><span class="icon">📑</span><span class="badge-dot badge-amber">6</span></button>
+              </div>
+            </div>
           </aside>
 
-          <div class="agent-room-main">
-            <section class="agent-workspace card" aria-labelledby="selected-agent-name">
-              <header class="agent-workspace-header">
+          <!-- Main Center Workspace: Agent Cockpit, Conversation, Tool Cards, Floating Composer -->
+          <div class="agent-room-main agentsroom-center-workspace">
+            <section class="agent-workspace card agentsroom-workspace-card" aria-labelledby="selected-agent-name">
+              <!-- Workspace Top Header -->
+              <header class="agent-workspace-header agentsroom-agent-header">
                 <div class="agent-profile">
-                  <span id="selected-agent-avatar" class="agent-profile-avatar" aria-hidden="true"></span>
+                  <div class="agent-avatar-ring">
+                    <span id="selected-agent-avatar" class="agent-profile-avatar" aria-hidden="true">FD</span>
+                  </div>
                   <div class="agent-profile-copy">
                     <div class="agent-name-line">
-                      <h3 id="selected-agent-name">Choose an agent</h3>
-                      <span id="selected-agent-status" class="agent-state-pill">Loading</span>
+                      <h3 id="selected-agent-name">Full-Stack Developer</h3>
+                      <span class="sparkle-badge-orange">✦</span>
+
+                      <!-- Inline Role Pill Dropdown -->
+                      <div class="dropdown-pill role-dropdown" id="agent-role-pill" title="Specialist Role">
+                        <span class="dot-amber">●</span>
+                        <span id="selected-agent-role">Full-Stack Developer</span>
+                        <span class="dropdown-arrow">▾</span>
+                      </div>
+
+                      <!-- Inline Model Pill Dropdown -->
+                      <div class="dropdown-pill model-dropdown" id="agent-model-pill" title="Active Model">
+                        <span class="dot-coral">●</span>
+                        <span id="selected-agent-model">opus</span>
+                        <span class="dropdown-arrow">▾</span>
+                      </div>
+
+                      <span id="selected-agent-status" class="agent-state-pill" hidden>Ready</span>
                     </div>
-                    <p id="selected-agent-role" class="subtitle">Select a teammate from the roster.</p>
-                    <div class="agent-provider-line">
+
+                    <div class="agent-provider-line" hidden>
                       <span id="selected-agent-provider" class="provider-pill">AgentCrew</span>
-                      <span id="selected-agent-model" class="subtitle"></span>
                       <span id="selected-agent-provider-status" class="subtitle"></span>
                     </div>
                   </div>
                 </div>
-                <div class="agent-workspace-actions">
-                  <span id="takeover-state-badge" class="badge">Auto</span>
-                  <button id="btn-takeover" class="btn btn-sm btn-primary" type="button">Take over</button>
-                  <button id="btn-release" class="btn btn-sm btn-secondary" type="button" disabled>Release</button>
+
+                <!-- Header Action Buttons -->
+                <div class="agent-workspace-actions agentsroom-header-actions">
+                  <button class="header-action-btn" title="Session Link" type="button">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                  </button>
+                  <button class="header-action-btn" title="Copy Output" type="button">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                  </button>
+                  <button class="header-action-btn" title="Share via Email" type="button">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+                  </button>
+                  <button class="header-action-btn" title="More Options" type="button">⋮</button>
+                  <button class="btn-close-cockpit" id="btn-close-cockpit" type="button" title="Close workspace">✕ Close</button>
+
+                  <!-- Hidden elements to preserve test & takeover contracts -->
+                  <span id="takeover-state-badge" class="badge" hidden>Auto</span>
+                  <button id="btn-takeover" class="btn btn-sm btn-primary" type="button" hidden>Take over</button>
+                  <button id="btn-release" class="btn btn-sm btn-secondary" type="button" disabled hidden>Release</button>
                 </div>
               </header>
 
-              <div class="provider-backup-setting">
+              <!-- Optional Backup CLI Settings (collapsed/hidden by default) -->
+              <div class="provider-backup-setting" id="provider-backup-setting-box" hidden>
                 <label for="agent-backup-provider">Backup CLI</label>
                 <select id="agent-backup-provider" aria-label="Optional backup provider">
                   <option value="">None (strict)</option>
@@ -353,56 +552,145 @@
                 <span id="agent-backup-feedback" role="status"></span>
               </div>
 
-              <div class="agent-workspace-context">
-                <div class="agent-context-heading">
-                  <div>
-                    <span class="eyebrow">Current assignment</span>
-                    <p id="selected-agent-task" class="agent-task-title">No active task assigned</p>
-                  </div>
-                  <span id="selected-agent-id" class="agent-id-label"></span>
-                </div>
+              <div class="agent-workspace-context" hidden>
+                <span class="eyebrow">Current assignment</span>
+                <p id="selected-agent-task" class="agent-task-title">No active task assigned</p>
+                <span id="selected-agent-id" class="agent-id-label"></span>
                 <p id="selected-agent-guidance" class="agent-context-copy">Take over to open this agent’s CLI. Shell commands use a separate channel.</p>
               </div>
 
-              <div class="agent-console-heading">
-                <div>
-                  <h4>Session</h4>
-                  <span id="agent-session-caption" class="subtitle">Live output appears here when a session is connected.</span>
+              <!-- Main Slack-Like / Tool Stream Conversational Panel -->
+              <div id="panel-chat-view" class="agent-tab-panel active">
+                <div class="room-chat-feed agentsroom-feed" id="team-room-chat-feed" aria-label="Slack-like team chat feed">
+                  <!-- Stream populated by app.js with messages, tool cards, and metrics -->
                 </div>
-                <span class="console-presence"><i></i> <span id="agent-session-state">Ready</span></span>
+
+                <!-- Floating Rich Prompt Box (TASK-44, matching agentsroom.png) -->
+                <div class="agentsroom-composer" id="agentsroom-composer">
+                  <div class="composer-header-tools">
+                    <button class="composer-mini-tool" title="Expand Composer" type="button">⤢</button>
+                    <button class="composer-mini-tool" title="Code Editor" type="button">⌸</button>
+                  </div>
+                  <textarea id="team-chat-input" class="composer-textarea" placeholder="Give your agent a prompt or a task: Enter to send, Shift+Enter for new line" rows="2" aria-label="Agent prompt input"></textarea>
+                  <div class="composer-toolbar">
+                    <div class="composer-tools-left">
+                      <button type="button" class="tool-chip" title="Tag / Topic">🏷️</button>
+                      <button type="button" class="tool-chip" title="Context Selection">✂</button>
+                      <button type="button" class="tool-chip" title="Insert Code">&lt;/&gt;</button>
+                      <button type="button" class="tool-chip" title="Device Test">📱</button>
+                      <button type="button" class="tool-chip" title="Docs & Knowledge">📖</button>
+                      <button type="button" class="tool-chip" title="Prompt History">🕒</button>
+                    </div>
+                    <div class="composer-tools-right">
+                      <div class="voice-controls-pill">
+                        <button type="button" class="voice-btn" title="Waveform Audio"><span class="icon">📶</span></button>
+                        <button type="button" class="voice-btn mic-btn" title="Voice Input"><span class="icon">🎙️</span></button>
+                      </div>
+                      <button type="button" class="tool-chip" title="Schedule">🕒</button>
+                      <button type="button" class="tool-chip" title="Queue">☰</button>
+                      <button type="button" class="composer-send-btn" id="btn-send-chat" title="Send (Enter)">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <p id="agent-terminal-alert" class="agent-terminal-alert" role="alert" hidden></p>
-              <div id="takeover-terminal" class="terminal-log agent-session-output" aria-label="Agent session output">
-                <div id="takeover-terminal-log" aria-live="polite"><div class="term-line system">[System] Select an agent to inspect its session.</div></div>
-                <div id="takeover-terminal-emulator" hidden aria-label="Interactive agent CLI terminal"></div>
+
+              <!-- Live Embedded Terminal Panel (Toggleable via bottom utility bar) -->
+              <div id="panel-terminal-view" class="agent-tab-panel" hidden>
+                <div class="agent-console-heading">
+                  <div class="agent-session-tabs" role="tablist" aria-label="Room view mode">
+                    <button type="button" class="session-tab-btn active" id="tab-btn-terminal" role="tab" aria-selected="true" aria-controls="panel-terminal-view">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+                      <span>Terminal</span>
+                    </button>
+                    <button type="button" class="session-tab-btn" id="tab-btn-chat" role="tab" aria-selected="false" aria-controls="panel-chat-view">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                      <span>Feed</span>
+                    </button>
+                  </div>
+                  <div class="console-actions">
+                    <button id="btn-popout-terminal-top" class="btn-popout" type="button" title="Pop out terminal into new window" aria-label="Pop out terminal into new window">
+                      <span>Pop Out ↗</span>
+                    </button>
+                    <span class="console-presence"><i></i> <span id="agent-session-state">Ready</span></span>
+                  </div>
+                </div>
+
+                <p id="agent-terminal-alert" class="agent-terminal-alert" role="alert" hidden></p>
+                <div id="takeover-terminal" class="terminal-log agent-session-output" aria-label="Agent session output">
+                  <div id="takeover-terminal-log" aria-live="polite"><div class="term-line system">[System] Select an agent to inspect its session.</div></div>
+                  <div id="takeover-terminal-emulator" hidden aria-label="Interactive agent CLI terminal"></div>
+                </div>
+                <div id="terminal-mobile-keys" class="terminal-mobile-keys" hidden aria-label="Terminal keys">
+                  <button type="button" data-terminal-key="escape">Esc</button>
+                  <button type="button" data-terminal-key="tab">Tab</button>
+                  <button type="button" data-terminal-key="control" aria-pressed="false">Ctrl</button>
+                  <button type="button" data-terminal-key="left" aria-label="Left arrow">←</button>
+                  <button type="button" data-terminal-key="down" aria-label="Down arrow">↓</button>
+                  <button type="button" data-terminal-key="up" aria-label="Up arrow">↑</button>
+                  <button type="button" data-terminal-key="right" aria-label="Right arrow">→</button>
+                </div>
+                <div class="takeover-mode" role="group" aria-label="Input mode">
+                  <span>Control</span>
+                  <button type="button" class="takeover-mode-button active" data-input-mode="agent_tui" aria-pressed="true">Agent CLI</button>
+                  <button type="button" class="takeover-mode-button" data-input-mode="shell" aria-pressed="false">Shell</button>
+                  <span class="takeover-mode-hint">Type directly in the CLI above.</span>
+                </div>
+                <div class="takeover-input-bar agent-composer" id="takeover-shell-composer" hidden>
+                  <input type="text" id="takeover-command-input" placeholder="Shell command…" aria-label="Shell command" disabled>
+                  <button id="btn-send-command" class="btn btn-sm btn-primary" type="button" disabled>Send</button>
+                </div>
               </div>
-              <div id="terminal-mobile-keys" class="terminal-mobile-keys" hidden aria-label="Terminal keys">
-                <button type="button" data-terminal-key="escape">Esc</button>
-                <button type="button" data-terminal-key="tab">Tab</button>
-                <button type="button" data-terminal-key="control" aria-pressed="false">Ctrl</button>
-                <button type="button" data-terminal-key="left" aria-label="Left arrow">←</button>
-                <button type="button" data-terminal-key="down" aria-label="Down arrow">↓</button>
-                <button type="button" data-terminal-key="up" aria-label="Up arrow">↑</button>
-                <button type="button" data-terminal-key="right" aria-label="Right arrow">→</button>
-              </div>
-              <div class="takeover-mode" role="group" aria-label="Input mode">
-                <span>Control</span>
-                <button type="button" class="takeover-mode-button active" data-input-mode="agent_tui" aria-pressed="true">Agent CLI</button>
-                <button type="button" class="takeover-mode-button" data-input-mode="shell" aria-pressed="false">Shell</button>
-                <span class="takeover-mode-hint">Type directly in the CLI above.</span>
-              </div>
-              <div class="takeover-input-bar agent-composer" id="takeover-shell-composer" hidden>
-                <input type="text" id="takeover-command-input" placeholder="Shell command…" aria-label="Shell command" disabled>
-                <button id="btn-send-command" class="btn btn-sm btn-primary" type="button" disabled>Send</button>
+
+              <!-- Bottom Utility Bar (matching AgentsRoom screenshot) -->
+              <div class="cockpit-utility-bar">
+                <div class="utility-pills-left">
+                  <button type="button" class="utility-pill" id="btn-utility-terminal" title="Toggle Live Terminal">
+                    <span class="util-badge-t">T</span> Terminal
+                  </button>
+                  <button type="button" class="utility-icon-pill" title="Fast Execution">⚡</button>
+                  <button type="button" class="utility-icon-pill" title="Tags">🏷️</button>
+                  <button type="button" class="utility-pill pill-amber" id="btn-utility-commands">
+                    <span class="icon">&gt;_</span> Commands
+                  </button>
+                  <button type="button" class="utility-pill pill-cyan" id="btn-utility-servers">
+                    <span class="icon">⚏</span> Servers
+                  </button>
+                  <button type="button" class="utility-pill pill-purple" id="btn-utility-databases">
+                    <span class="icon">🗄</span> Databases
+                  </button>
+                </div>
+                <div class="utility-actions-right">
+                  <button type="button" class="util-btn" title="Split Screen">◫</button>
+                  <button type="button" class="util-btn" id="btn-popout-terminal" title="Pop Out Terminal Window">↗</button>
+                </div>
               </div>
             </section>
 
+            <!-- Isometric 2.5D Room View (Toggleable) -->
             <div class="canvas-stage room-map-view" id="room-map-view" hidden>
               <div id="pixel-room-wrapper" class="pixel-canvas-wrapper">
                 <canvas id="pixel-room-canvas" width="960" height="520" aria-label="Isometric agent room map"></canvas>
               </div>
             </div>
           </div>
+
+          <!-- Right Vertical Rail: FILES & CHANGES Dock (matching AgentsRoom screenshot) -->
+          <aside class="dock-rail-right" id="dock-rail-right" aria-label="Files and Changes rail">
+            <div class="rail-top-tools">
+              <button class="rail-btn" title="Collapse Rail" type="button">⤓</button>
+              <button class="rail-btn" title="Fullscreen" type="button">⛶</button>
+            </div>
+            <button class="rail-vertical-tab" id="btn-toggle-files-changes" type="button" title="Open Files & Changes Drawer">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+              <span>FILES &amp; CHANGES</span>
+            </button>
+            <div class="rail-floating-actions">
+              <button class="rail-fab-btn" id="btn-rail-chat" title="Channel Discussions" type="button">💬</button>
+              <button class="rail-fab-btn" id="btn-rail-audio" title="Audio Stream" type="button">🔊</button>
+            </div>
+          </aside>
         </div>
       </section>
 
@@ -806,6 +1094,89 @@
         <span>More</span>
       </button>
     </nav>
+  </div>
+
+  <!-- AgentsRoom Status Footer (matching reference screenshot) -->
+  <footer class="agentsroom-footer" id="agentsroom-footer" aria-label="System status bar">
+    <div class="footer-left">
+      <button class="footer-btn" type="button"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg> <span>MOBILE</span></button>
+      <button class="footer-btn" type="button"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg> <span>MACHINES</span></button>
+      <button class="footer-btn" type="button"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg> <span>CHROME</span></button>
+      <span class="footer-divider"></span>
+      <button class="footer-icon-btn" title="System Controls" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line></svg></button>
+      <button class="footer-icon-btn" title="Security & Sandboxing" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg></button>
+      <button class="footer-icon-btn" title="Coffee Break" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8h1a4 4 0 0 1 0 8h-1"></path><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path><line x1="6" y1="1" x2="6" y2="4"></line><line x1="10" y1="1" x2="10" y2="4"></line><line x1="14" y1="1" x2="14" y2="4"></line></svg></button>
+      <span class="footer-status-pill">● ✦ Live</span>
+    </div>
+    <div class="footer-right">
+      <button class="footer-icon-btn" id="footer-settings-btn" title="Settings" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></button>
+      <button class="footer-icon-btn" title="Split Screen" type="button">◫</button>
+      <button class="footer-icon-btn" id="footer-theme-btn" title="Toggle Theme" type="button"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg></button>
+      <button class="footer-icon-btn" title="Bug report / Diagnostics" type="button">🪲</button>
+      <span class="footer-version">v1.221.1</span>
+    </div>
+  </footer>
+
+  <!-- Project Onboarding Wizard Modal (TASK-39) -->
+  <div class="modal-overlay" id="project-wizard-modal" hidden role="dialog" aria-modal="true" aria-labelledby="wizard-modal-title">
+    <div class="modal-card project-wizard-card">
+      <div class="modal-header">
+        <div>
+          <h2 id="wizard-modal-title" class="modal-title">Create / Connect Project</h2>
+          <p class="modal-subtitle">Organize codebases and choose multi-agent orchestration strategy</p>
+        </div>
+        <button class="modal-close-btn" id="btn-close-project-wizard" type="button" aria-label="Close modal">×</button>
+      </div>
+      <form id="project-wizard-form" class="wizard-form">
+        <div class="form-group">
+          <label for="wizard-project-name">Project Name</label>
+          <input type="text" id="wizard-project-name" class="form-input" placeholder="e.g. Acme API, Personal Blog" required>
+        </div>
+        <div class="form-group">
+          <label for="wizard-project-path">Local Repository Path</label>
+          <input type="text" id="wizard-project-path" class="form-input" placeholder="/home/username/projects/my-repo" required>
+          <small class="form-help">Must be an existing directory on your machine.</small>
+        </div>
+        <div class="form-group">
+          <label for="wizard-project-zone">Workspace Zone</label>
+          <select id="wizard-project-zone" class="form-select">
+            <option value="work">Work</option>
+            <option value="personal">Personal</option>
+            <option value="side">Side Projects</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Project Operating Mode</label>
+          <div class="wizard-mode-cards">
+            <label class="mode-card">
+              <input type="radio" name="wizard-mode" value="independent" checked>
+              <div class="mode-card-content">
+                <div class="mode-card-header">
+                  <strong>Independent Repo</strong>
+                  <span class="badge-mode">Direct</span>
+                </div>
+                <p>Agents work directly inside the repository trunk or standard feature branches. Ideal for single-focus builds.</p>
+              </div>
+            </label>
+            <label class="mode-card">
+              <input type="radio" name="wizard-mode" value="multi_worktree">
+              <div class="mode-card-content">
+                <div class="mode-card-header">
+                  <strong>Multi-Worktree Crew</strong>
+                  <span class="badge-mode">Isolated</span>
+                </div>
+                <p>Isolates each agent and task into dedicated Git worktrees under <code>.agentcrew/worktrees/</code> to prevent merge clashes.</p>
+              </div>
+            </label>
+          </div>
+        </div>
+        <div id="wizard-error-msg" class="wizard-error" hidden></div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" id="btn-cancel-project-wizard">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="btn-submit-project-wizard">Create & Connect</button>
+        </div>
+      </form>
+    </div>
   </div>
 
   <script src="/analytics-dashboard-data.js"></script>

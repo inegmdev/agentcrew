@@ -84,6 +84,68 @@ test('SupervisorServer serves TRD §12 API routes and SSE stream', async (t) => 
     assert.equal(data.agents.length, 13);
   });
 
+  await t.test('GET and POST /api/v1/projects manage project registry and activation (TASK-37)', async () => {
+    // 1. GET /api/v1/projects
+    const listRes = await fetch(`${baseUrl}/api/v1/projects`);
+    assert.equal(listRes.status, 200);
+    const listData = await listRes.json();
+    assert.ok(Array.isArray(listData.projects));
+    assert.ok(listData.projects.length >= 1);
+    assert.equal(listData.projects[0].id, project.id);
+
+    // 2. Reject non-JSON POST
+    const nonJsonRes = await fetch(`${baseUrl}/api/v1/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: 'invalid'
+    });
+    assert.equal(nonJsonRes.status, 415);
+
+    // 3. Reject non-existent path
+    const invalidPathRes = await fetch(`${baseUrl}/api/v1/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: '/non/existent/repo/dir' })
+    });
+    assert.equal(invalidPathRes.status, 400);
+
+    // 4. Register new valid project
+    const newProjDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agentcrew-api-proj-'));
+    const registerRes = await fetch(`${baseUrl}/api/v1/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        path: newProjDir,
+        name: 'Secondary Repo',
+        mode: 'independent',
+        zone: 'personal'
+      })
+    });
+    assert.equal(registerRes.status, 201);
+    const regData = await registerRes.json();
+    assert.equal(regData.project.name, 'Secondary Repo');
+    assert.equal(regData.project.zone, 'personal');
+    assert.equal(regData.project.mode, 'independent');
+
+    // 5. Activate the new project
+    const activateRes = await fetch(`${baseUrl}/api/v1/projects/${regData.project.id}/activate`, {
+      method: 'POST'
+    });
+    assert.equal(activateRes.status, 200);
+    const actData = await activateRes.json();
+    assert.equal(actData.success, true);
+    assert.equal(actData.project.id, regData.project.id);
+    assert.equal(server.projectId, regData.project.id);
+    assert.equal(server.projectName, 'Secondary Repo');
+
+    // 6. Verify workspace now reflects new project
+    const wsRes = await fetch(`${baseUrl}/api/v1/workspace`);
+    const wsData = await wsRes.json();
+    assert.equal(wsData.workspace.id, regData.project.id);
+
+    fs.rmSync(newProjDir, { recursive: true, force: true });
+  });
+
   await t.test('command API rejects cross-origin and non-JSON browser requests', async () => {
     const body = JSON.stringify({ command_type: 'session.takeover', payload: { agent_id: 'Dev-1' } });
     const crossOrigin = await fetch(`${baseUrl}/api/v1/commands`, {

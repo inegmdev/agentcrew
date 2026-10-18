@@ -33,6 +33,13 @@ deleting is what this policy exists to prevent.
 
 <!-- Day sections follow. Append today's notes under `## YYYY-MM-DD`. -->
 
+## 2026-10-18
+
+Session opened by loading long-term memory, recent short-term memory, and the
+product/architecture docs. Current worktree is clean; latest recorded state is
+the live repository data feed with 75 passing tests. No implementation task has
+been selected yet.
+
 ## 2026-09-19
 
 Design session that reversed decision-1: **we build the orchestrator, not
@@ -335,3 +342,53 @@ Independent mobile UI review fixed hidden connection errors, stale Connected sta
 xterm screen-reader mode, 44px touch keys, and the Ctrl-key latch. Browser smoke
 confirmed a missing Gemini agent shows a visible unavailable reason and a fake
 Codex PTY survives same-tab refresh, accepts input, and releases cleanly.
+
+Created Milestone m-3 (AgentsRoom Cockpit & Specialist Store) and applied the
+to-tickets skill to break down the product roadmap into 19 vertical-slice tickets
+(TASK-37 through TASK-55). Implemented TASK-37 on branch
+`feat/task-37-multi-project-registry`: established central master registry SQLite
+database (`registry.db`) in `WorkspaceManager` with projects table (id, name, path,
+mode: independent vs multi_worktree, zone: work/personal/side, is_active, created_at),
+added `GET /api/v1/projects`, `POST /api/v1/projects`, and `POST /api/v1/projects/:id/activate`
+routes on `SupervisorServer`, and verified multi-project registration, isolation,
+and atomic context switching with 103 passing tests.
+
+Implemented TASK-38 & TASK-39: styled dashboard with Dark Sea Blue oceanic palette,
+added leftmost multi-project navigation dock grouped into zones (work/personal/side)
+with instant workspace switching and glow badges. Implemented project onboarding wizard
+modal with dual-mode selector (Independent Repo vs. Multi-Worktree mode). Integrated
+TASK-46 pop-out terminal (`/terminal`) enabling detached floating xterm windows via
+`window.open`. All 103 tests pass cleanly. Fired background test server on
+`http://127.0.0.1:3000`.
+
+## 2026-10-19
+
+Redesigning AgentCrew Web UI to match the AgentsRoom Cockpit layout and Dark Sea Blue
+aesthetic from the user's reference screenshot (`/home/inegm/Pictures/agentsroom.png`).
+Implementing top navigation bar with project switcher and needs-input pill, 3-column
+cockpit layout (categorized agent roster, center conversational feed with structured
+tool execution cards and floating prompt composer, right vertical dock with 'FILES & CHANGES'),
+bottom utility tabs (`Terminal`, `Commands`, `Servers`, `Databases`), and status footer.
+Converted the remote HTTP unauthenticated warning into a dismissible security toast
+notification with entrance/exit animation and sessionStorage persistence.
+
+Audited browser screenshot (`/home/inegm/Pictures/sceenshot.png`) and fixed visual artifacts:
+1. Added universal `[hidden] { display: none !important; }` in `style.css` so buttons and
+   optional boxes (`#provider-backup-setting-box`, `#btn-takeover`, `#btn-release`,
+   `#selected-agent-status`, hidden filters) never override HTML5 hidden attributes.
+2. Filtered PTY socket reconnection/error logs so they stay inside the terminal emulator log
+   rather than spamming `#team-room-chat-feed` as cards.
+3. Added edge-to-edge cockpit layout overrides: hiding `.project-dock` and `.app-sidebar`
+   in `#view-team-room` mode, clearing `.dashboard-container` padding and overflow, ensuring
+   the full 3-column layout, bottom utility bar, and floating prompt composer are visible
+   without vertical clipping or double sidebars.
+4. Styled `.project-dock-tooltip` as an absolute floating hover tooltip to fix text overflow
+   on project dock buttons.
+5. Set `flex-wrap: nowrap` and `white-space: nowrap` on `.agent-name-line` to keep agent
+   identity and role dropdowns neatly aligned on one line.
+All 103 unit/integration tests pass. Restarted daemon on port 3000.
+
+
+
+
+

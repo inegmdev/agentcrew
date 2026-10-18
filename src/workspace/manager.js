@@ -24,8 +24,132 @@ class WorkspaceManager {
     this.baseDir = opts.baseDir || path.join(process.env.HOME || '', '.agentcrew');
   }
 
-  async getOrInitProject({ repoPath, name } = {}) {
+  _getRegistryDb() {
+    fs.mkdirSync(this.baseDir, { recursive: true });
+    const regPath = path.join(this.baseDir, 'registry.db');
+    const db = new DatabaseSync(regPath);
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS projects (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        path TEXT NOT NULL UNIQUE,
+        mode TEXT NOT NULL DEFAULT 'multi_worktree',
+        zone TEXT NOT NULL DEFAULT 'work',
+        is_active INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL
+      );
+    `);
+    return db;
+  }
+
+  _registerInMaster({ id, name, path: projectPath, mode = 'multi_worktree', zone = 'work', isActive = 0, createdAt }) {
+    const regDb = this._getRegistryDb();
+    try {
+      regDb.prepare(`
+        INSERT INTO projects (id, name, path, mode, zone, is_active, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(path) DO UPDATE SET
+          name = excluded.name,
+          mode = excluded.mode,
+          zone = excluded.zone,
+          is_active = CASE WHEN excluded.is_active = 1 THEN 1 ELSE projects.is_active END
+      `).run(id, name, projectPath, mode, zone, isActive ? 1 : 0, createdAt || new Date().toISOString());
+    } finally {
+      regDb.close();
+    }
+  }
+
+  async listProjects() {
+    const db = this._getRegistryDb();
+    try {
+      const rows = db.prepare('SELECT id, name, path, mode, zone, is_active, created_at FROM projects ORDER BY is_active DESC, created_at DESC').all();
+      return rows.map(r => ({ ...r, is_active: Boolean(r.is_active) }));
+    } finally {
+      db.close();
+    }
+  }
+
+  async registerProject({ path: targetPath, name, mode = 'multi_worktree', zone = 'work' } = {}) {
+    if (!targetPath || typeof targetPath !== 'string') {
+      throw Object.assign(new Error('Project path is required'), { statusCode: 400 });
+    }
+    if (!fs.existsSync(targetPath)) {
+      throw Object.assign(new Error(`Target path does not exist: ${targetPath}`), { statusCode: 400 });
+    }
+    const normalized = fs.realpathSync(targetPath);
+    if (!['independent', 'multi_worktree'].includes(mode)) {
+      throw Object.assign(new Error('Invalid project mode: must be independent or multi_worktree'), { statusCode: 400 });
+    }
+    if (!['work', 'personal', 'side'].includes(zone)) {
+      throw Object.assign(new Error('Invalid project zone: must be work, personal, or side'), { statusCode: 400 });
+    }
+    const db = this._getRegistryDb();
+    try {
+      const existing = db.prepare('SELECT * FROM projects WHERE path = ?').get(normalized);
+      if (existing) {
+        return { ...existing, is_active: Boolean(existing.is_active) };
+      }
+      const count = db.prepare('SELECT COUNT(*) as c FROM projects').get().c;
+      const isActive = count === 0 ? 1 : 0;
+      const projectName = name || path.basename(normalized);
+      const res = await this.initProject({ repoPath: normalized, name: projectName, mode, zone, isActive });
+      const row = db.prepare('SELECT * FROM projects WHERE id = ?').get(res.id);
+      return { ...row, is_active: Boolean(row.is_active), dbPath: res.dbPath };
+    } finally {
+      db.close();
+    }
+  }
+
+  async activateProject(projectId) {
+    if (!projectId) {
+      throw Object.assign(new Error('Project ID is required'), { statusCode: 400 });
+    }
+    const db = this._getRegistryDb();
+    try {
+      const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(projectId);
+      if (!project) {
+        throw Object.assign(new Error(`Project not found: ${projectId}`), { statusCode: 404 });
+      }
+      db.exec('BEGIN TRANSACTION');
+      db.prepare('UPDATE projects SET is_active = 0').run();
+      db.prepare('UPDATE projects SET is_active = 1 WHERE id = ?').run(projectId);
+      db.exec('COMMIT');
+      return { ...project, is_active: true };
+    } catch (err) {
+      try { db.exec('ROLLBACK'); } catch (_) {}
+      throw err;
+    } finally {
+      db.close();
+    }
+  }
+
+  async getActiveProject() {
+    const db = this._getRegistryDb();
+    try {
+      const active = db.prepare('SELECT * FROM projects WHERE is_active = 1 LIMIT 1').get();
+      if (active) return { ...active, is_active: true };
+      const fallback = db.prepare('SELECT * FROM projects ORDER BY created_at DESC LIMIT 1').get();
+      return fallback ? { ...fallback, is_active: Boolean(fallback.is_active) } : null;
+    } finally {
+      db.close();
+    }
+  }
+
+  async getOrInitProject({ repoPath, name, mode = 'multi_worktree', zone = 'work' } = {}) {
     const normalized = fs.realpathSync(repoPath);
+    const regDb = this._getRegistryDb();
+    try {
+      const regRow = regDb.prepare('SELECT * FROM projects WHERE path = ?').get(normalized);
+      if (regRow) {
+        const dbPath = path.join(this.baseDir, 'projects', regRow.id, 'agentcrew.db');
+        if (fs.existsSync(dbPath)) {
+          return { id: regRow.id, dbPath, projectDir: path.dirname(dbPath) };
+        }
+      }
+    } finally {
+      regDb.close();
+    }
+
     const projectsDir = path.join(this.baseDir, 'projects');
     if (fs.existsSync(projectsDir)) {
       for (const entry of fs.readdirSync(projectsDir, { withFileTypes: true })) {
@@ -36,6 +160,15 @@ class WorkspaceManager {
         try {
           const row = db.prepare('SELECT id, repo_path FROM projects LIMIT 1').get();
           if (row && fs.existsSync(row.repo_path) && fs.realpathSync(row.repo_path) === normalized) {
+            this._registerInMaster({
+              id: row.id,
+              name: name || path.basename(normalized),
+              path: normalized,
+              mode,
+              zone,
+              isActive: 1,
+              createdAt: new Date().toISOString()
+            });
             return { id: row.id, dbPath, projectDir: path.dirname(dbPath) };
           }
         } catch (_) {
@@ -45,10 +178,10 @@ class WorkspaceManager {
         }
       }
     }
-    return this.initProject({ repoPath: normalized, name });
+    return this.initProject({ repoPath: normalized, name, mode, zone, isActive: 1 });
   }
 
-  async initProject({ repoPath, name } = {}) {
+  async initProject({ repoPath, name, mode = 'multi_worktree', zone = 'work', isActive = 0 } = {}) {
     const projectId = crypto.randomUUID();
     const projectDir = path.join(this.baseDir, 'projects', projectId);
     fs.mkdirSync(projectDir, { recursive: true });
@@ -113,6 +246,16 @@ class WorkspaceManager {
 
     db.close();
 
+    this._registerInMaster({
+      id: projectId,
+      name: name || path.basename(repoPath),
+      path: fs.realpathSync(repoPath),
+      mode,
+      zone,
+      isActive,
+      createdAt: now,
+    });
+
     return {
       id: projectId,
       dbPath,
@@ -167,6 +310,59 @@ class WorkspaceManager {
     const legacy = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'provider_sessions'").get();
     if (legacy) db.exec(`INSERT OR IGNORE INTO provider_conversations
       SELECT project_id, agent_id, provider, session_id, updated_at FROM provider_sessions`);
+  }
+
+  ensureRoomMessages(db) {
+    db.exec(`CREATE TABLE IF NOT EXISTS room_messages (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL,
+      channel TEXT NOT NULL DEFAULT 'team-activity',
+      sender_type TEXT NOT NULL,
+      sender_id TEXT NOT NULL,
+      sender_name TEXT NOT NULL,
+      text TEXT NOT NULL,
+      metadata TEXT,
+      created_at TEXT NOT NULL
+    )`);
+  }
+
+  async listRoomMessages(projectId, { channel = 'team-activity', limit = 100 } = {}) {
+    const dbPath = path.join(this.baseDir, 'projects', projectId, 'agentcrew.db');
+    if (!fs.existsSync(dbPath)) return [];
+    const db = new DatabaseSync(dbPath);
+    try {
+      this.ensureRoomMessages(db);
+      const rows = db.prepare('SELECT * FROM room_messages WHERE project_id = ? AND channel = ? ORDER BY created_at ASC LIMIT ?')
+        .all(projectId, channel, limit);
+      return rows.map((r) => ({
+        ...r,
+        metadata: r.metadata ? JSON.parse(r.metadata) : null
+      }));
+    } finally {
+      db.close();
+    }
+  }
+
+  async addRoomMessage(projectId, { channel = 'team-activity', senderType = 'human', senderId = 'operator', senderName = 'Operator', text, metadata = null } = {}) {
+    if (!text || typeof text !== 'string') {
+      throw Object.assign(new Error('Message text is required'), { statusCode: 400 });
+    }
+    const dbPath = path.join(this.baseDir, 'projects', projectId, 'agentcrew.db');
+    if (!fs.existsSync(dbPath)) return null;
+    const db = new DatabaseSync(dbPath);
+    try {
+      this.ensureRoomMessages(db);
+      const id = crypto.randomUUID();
+      const now = new Date().toISOString();
+      const metaStr = metadata ? JSON.stringify(metadata) : null;
+      db.prepare(`
+        INSERT INTO room_messages (id, project_id, channel, sender_type, sender_id, sender_name, text, metadata, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(id, projectId, channel, senderType, senderId, senderName, text, metaStr, now);
+      return { id, project_id: projectId, channel, sender_type: senderType, sender_id: senderId, sender_name: senderName, text, metadata, created_at: now };
+    } finally {
+      db.close();
+    }
   }
 
   async checkReadiness(projectId) {

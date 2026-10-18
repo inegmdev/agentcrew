@@ -303,11 +303,15 @@ before shell execution. PRD/TRD, UI, and routing/ownership tests updated.
 TASK-34: readiness calls each provider adapter probe; reports distinguish
 available, unavailable, and quota-limited, include a known reset time and
 assigned agents, and the UI renders those states. Chat replies identify the
-provider that answered, including after failover. Gemini has a one-shot runner
-and is explicitly unavailable when its CLI is absent.
+provider that answered, including after failover. Gemini remains explicitly
+unavailable even when installed: the required roster-only delegation guard is
+not verified in the official CLI contract. Assigned unavailable providers block
+readiness; binary detection is not recorded as qualification.
 
 TASK-35 adds incremental provider stdout callbacks through `PtyManager` and
 `ChatService`, PTY WebSocket chat turn frames, and SSE room-thinking lifecycle
 events. Thinking cleanup is idempotent across completion, failure/timeout, and
 socket close. Provider output is line-normalized; exact delta event shapes remain
 provider-dependent. The frame contract and UI behavior are recorded in PRD/TRD.
+Cross-task review hardened same-origin/JSON command handling, prevented release
+while a human chat turn remains active, and fixed a WebSocket mode-switch race.

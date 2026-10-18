@@ -237,8 +237,9 @@ class ChatService {
       const existingSession = await this.getAgentSession(agent.name);
 
       // Order providers: agent's assigned provider first, followed by others
-      const order = [agent.provider, 'agy', 'codex', 'gemini']
+      const order = [agent.provider, 'agy', 'codex']
         .filter((p, i, a) => {
+          if (p === 'gemini') return false;
           const quota = this.quotaLimits.get(p);
           if (quota?.resetAt && Date.parse(quota.resetAt) <= Date.now()) this.quotaLimits.delete(p);
           const stillLimited = quota && (!quota.resetAt || Date.parse(quota.resetAt) > Date.now());
@@ -272,7 +273,7 @@ class ChatService {
                 : text;
               if (delta) {
                 streamedText += delta;
-                options.onChunk?.(delta);
+                options.onChunk?.(delta, name);
               }
             }
           };
@@ -305,10 +306,17 @@ class ChatService {
           let result = null;
           if (name === 'agy') {
             // Attach the prompt and preserve the provider's line-stream output for live delivery.
-            const finalArgs = spawnArgs
-              .map((arg) => (arg === '-p' ? `-p=${promptInstructions}` : arg))
-              .filter((arg) => arg !== '--input-format' && arg !== 'stream-json');
-            finalArgs.push('--output-format', 'stream-json');
+            const finalArgs = [];
+            for (let i = 0; i < spawnArgs.length; i++) {
+              const arg = spawnArgs[i];
+              if (arg === '-p') finalArgs.push(`-p=${promptInstructions}`);
+              else if (arg === '--input-format') i++;
+              else if (arg === '--output-format') {
+                finalArgs.push('--output-format', 'stream-json');
+                i++;
+              } else finalArgs.push(arg);
+            }
+            if (!finalArgs.includes('--output-format')) finalArgs.push('--output-format', 'stream-json');
 
             if (this.ptyManager.executeCommand) {
               result = await this.ptyManager.executeCommand(adapter.command || 'agy', finalArgs, {
@@ -351,7 +359,7 @@ class ChatService {
             }
 
             if (text && !result.timedOut && result.code === 0) {
-              if (!streamedText) options.onChunk?.(text);
+              if (!streamedText) options.onChunk?.(text, name);
               return `${label} [provider: ${name}]: ${text}`;
             }
           } else if (name === 'codex') {
@@ -415,29 +423,7 @@ class ChatService {
             if (streamedText && (!answerText || answerText.startsWith('{'))) answerText = streamedText;
 
             if (answerText && !result.timedOut && result.code === 0) {
-              if (!streamedText) options.onChunk?.(answerText);
-              return `${label} [provider: ${name}]: ${answerText}`;
-            }
-          } else if (name === 'gemini') {
-            const finalArgs = [...spawnArgs, promptInstructions];
-            result = await this.ptyManager.executeCommand(adapter.command || 'gemini', finalArgs, {
-              cwd: this.repoPath,
-              timeoutMs: 60000,
-              signal: turnControl.signal,
-              onStdout,
-            });
-            if (result.quiescent === false) active.quiescent = false;
-            if (turnControl.signal.aborted) return `${label}: turn interrupted for takeover`;
-            flushStream();
-            let answerText = '';
-            for (const line of (result.stdout || '').split('\n')) {
-              const event = adapter.parseStreamEvent(line);
-              if (event?.type === 'message' && event.content) answerText = event.content;
-              if (event?.type === 'result' && event.response) answerText = event.response;
-            }
-            if (!answerText) answerText = streamedText || (result.stdout || '').trim();
-            if (answerText && !result.timedOut && result.code === 0) {
-              if (!streamedText) options.onChunk?.(answerText);
+              if (!streamedText) options.onChunk?.(answerText, name);
               return `${label} [provider: ${name}]: ${answerText}`;
             }
           }
@@ -446,6 +432,7 @@ class ChatService {
             ? 'timed out'
             : ((result?.stderr || '').split('\n')[0] || `exit ${result?.code}`);
           errors.push(`${name}: ${why}`);
+          if (streamedText) options.onRetry?.(name);
           if (isQuotaError(`${result?.stderr || ''} ${result?.stdout || ''}`)) {
             const detail = `${result?.stderr || ''} ${result?.stdout || ''}`.trim();
             this.quotaLimits.set(name, {
@@ -455,6 +442,12 @@ class ChatService {
           }
         } catch (e) {
           errors.push(`${name}: ${e.message}`);
+          if (isQuotaError(e.message)) {
+            this.quotaLimits.set(name, {
+              reason: 'Provider quota or rate limit reached',
+              resetAt: quotaResetAt(e.message),
+            });
+          }
         }
       }
 

@@ -64,6 +64,7 @@ class SupervisorServer {
     this.sseClients = new Set();
     this.wsClients = new Set();
     this.ptyOwners = new Map();
+    this.humanTurns = new Map();
     this.cursorCounter = 0;
     this.httpServer = null;
     this.heartbeatInterval = null;
@@ -103,6 +104,11 @@ class SupervisorServer {
 
   async handleUpgrade(req, socket, head) {
     const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+    if (!this.isSameOrigin(req)) {
+      socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
+      socket.destroy();
+      return;
+    }
     if (parsedUrl.pathname === '/api/v1/pty') {
       const requestedAgentId = parsedUrl.searchParams.get('agent_id') || 'Dev-1';
       const agentId = (await this.chatService.resolveAgent(requestedAgentId)).name;
@@ -168,6 +174,7 @@ class SupervisorServer {
             } else {
               const turnId = crypto.randomUUID();
               activeChatTurns.add(turnId);
+              this.beginHumanTurn(agentId);
               let outcome = 'failed';
               const wsSend = (frame) => ws.send(JSON.stringify({ turn_id: turnId, agent_id: agentId, ...frame }));
               this.teamRoom.updateAgentState(agentId, { state: 'thinking' });
@@ -177,7 +184,8 @@ class SupervisorServer {
                 const response = await this.chatService.generateResponse(agentId, input.text, {
                   source: 'human',
                   throwOnProviderError: true,
-                  onChunk: (text) => wsSend({ type: 'chat_chunk', text }),
+                  onChunk: (text, provider) => wsSend({ type: 'chat_chunk', text, provider }),
+                  onRetry: (provider) => wsSend({ type: 'chat_retry', provider }),
                 });
                 outcome = 'completed';
                 wsSend({ type: 'chat_completed', answer: response });
@@ -193,6 +201,7 @@ class SupervisorServer {
                 wsSend({ type: 'chat_failed', error: error.message });
               } finally {
                 finishThinking(turnId, outcome);
+                this.endHumanTurn(agentId);
               }
             }
           } else if (parsed.type === 'resize') {
@@ -262,6 +271,26 @@ class SupervisorServer {
     }, 15000);
   }
 
+  isSameOrigin(req) {
+    if (!req.headers.origin) return true;
+    try {
+      const origin = new URL(req.headers.origin);
+      return ['http:', 'https:'].includes(origin.protocol) && origin.host === req.headers.host;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  beginHumanTurn(agentId) {
+    this.humanTurns.set(agentId, (this.humanTurns.get(agentId) || 0) + 1);
+  }
+
+  endHumanTurn(agentId) {
+    const remaining = (this.humanTurns.get(agentId) || 1) - 1;
+    if (remaining) this.humanTurns.set(agentId, remaining);
+    else this.humanTurns.delete(agentId);
+  }
+
   broadcastEvent(eventType, data) {
     this.cursorCounter++;
     const payload = `id: ${this.cursorCounter}\nevent: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`;
@@ -278,13 +307,10 @@ class SupervisorServer {
     const parsedUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     const pathname = parsedUrl.pathname;
 
-    // CORS headers for local multi-tool development
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    if (!this.isSameOrigin(req)) return this.jsonResponse(res, 403, { error: 'Cross-origin request rejected' });
 
     if (req.method === 'OPTIONS') {
-      res.writeHead(204);
+      res.writeHead(204, { Allow: 'GET, POST, OPTIONS' });
       res.end();
       return;
     }
@@ -319,11 +345,12 @@ class SupervisorServer {
       for (const provider of providers) {
         provider.agents = agents.filter((agent) => agent.provider === provider.name).map((agent) => agent.name);
       }
-      const qualified = providers.filter((provider) => provider.available).map((provider) => provider.name);
+      const unavailableAssignments = providers.filter((provider) => provider.agents.length && !provider.available);
       return this.jsonResponse(res, 200, {
-        status: 'ready',
+        status: unavailableAssignments.length ? 'blocked' : 'ready',
         readiness,
-        qualified_providers: qualified,
+        available_providers: providers.filter((provider) => provider.available).map((provider) => provider.name),
+        qualified_providers: [],
         providers
       });
     }
@@ -416,6 +443,9 @@ class SupervisorServer {
     }
 
     if (pathname === '/api/v1/commands' && method === 'POST') {
+      if (!/^application\/json(?:\s*;|\s*$)/i.test(req.headers['content-type'] || '')) {
+        return this.jsonResponse(res, 415, { error: 'application/json Content-Type required' });
+      }
       const body = await this.readJsonBody(req);
       return this.handleCommand(body, res);
     }
@@ -452,6 +482,9 @@ class SupervisorServer {
         if (!this.takeoverController.validateToken(agentId, payload.takeover_token)) {
           throw Object.assign(new Error('Valid takeover token required'), { statusCode: 403, code: 'INVALID_TAKEOVER_TOKEN' });
         }
+        if (this.humanTurns.get(agentId)) {
+          throw Object.assign(new Error('Human turn is still active; wait for it to finish before release'), { statusCode: 409, code: 'HUMAN_TURN_ACTIVE' });
+        }
         for (const [sessionId, owner] of this.ptyOwners) {
           if (owner.agentId !== agentId) continue;
           owner.revoking = true;
@@ -481,7 +514,12 @@ class SupervisorServer {
         let output = '';
         if (input.mode === 'chat' && input.text.length > 0) {
           // Route dialogue directly to active Agent Persona reasoning
-          output = await this.chatService.generateResponse(agentId, input.text, { source: 'human' });
+          this.beginHumanTurn(agentId);
+          try {
+            output = await this.chatService.generateResponse(agentId, input.text, { source: 'human' });
+          } finally {
+            this.endHumanTurn(agentId);
+          }
           this.broadcastEvent('agent_answered', {
             agent_id: agentId,
             pr_number: 'live',

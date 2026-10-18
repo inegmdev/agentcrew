@@ -19,16 +19,11 @@ class GeminiAdapter {
     return {
       id: 'gemini',
       contract_version: 1,
-      available: isPresent,
-      reason: isPresent ? null : `Runner '${this.command}' was not found on PATH`,
-      capabilities: [
-        'stream_messages',
-        'send_followup',
-        'interrupt_turn',
-        'tool_events',
-        'permission_decisions',
-        'disable_native_delegation',
-      ],
+      available: false,
+      reason: isPresent
+        ? 'Gemini CLI detected, but roster-only delegation control is not qualified'
+        : `Runner '${this.command}' was not found on PATH`,
+      capabilities: [],
     };
   }
 
@@ -37,7 +32,6 @@ class GeminiAdapter {
       '-p',
       '--output-format',
       'stream-json',
-      '--disable-delegation',
     ];
 
     if (model) {

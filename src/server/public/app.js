@@ -1136,13 +1136,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const wsUrl = `${proto}//${window.location.host}/api/v1/pty?mode=${inputMode}&agent_id=${encodeURIComponent(agentId)}&token=${encodeURIComponent(token)}`;
 
     try {
-      ptySocket = new WebSocket(wsUrl);
+      const socket = new WebSocket(wsUrl);
+      ptySocket = socket;
 
-      ptySocket.onopen = () => {
+      socket.onopen = () => {
         log(`[Session] Connected ${inputMode} channel for ${agentId}`, 'success');
       };
 
-      ptySocket.onmessage = (event) => {
+      socket.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);
           if (msg.type === 'ready') {
@@ -1151,6 +1152,8 @@ document.addEventListener('DOMContentLoaded', () => {
             log(`[${msg.agent_id}] thinking…`, 'system');
           } else if (msg.type === 'chat_chunk') {
             log(msg.text, 'success');
+          } else if (msg.type === 'chat_retry') {
+            log(`[${msg.provider}] could not finish; trying another provider…`, 'action');
           } else if (msg.type === 'chat_completed') {
             log(`[${msg.agent_id}] reply complete`, 'system');
           } else if (msg.type === 'chat_failed') {
@@ -1177,12 +1180,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       };
 
-      ptySocket.onclose = () => {
+      socket.onclose = () => {
         log(`[PTY] Session disconnected`, 'system');
-        ptySocket = null;
+        if (ptySocket === socket) ptySocket = null;
       };
 
-      ptySocket.onerror = (err) => {
+      socket.onerror = (err) => {
         log(`[PTY Error] WebSocket connection failed`, 'action');
       };
     } catch (err) {

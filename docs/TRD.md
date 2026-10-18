@@ -886,11 +886,17 @@ not exposed as a generic unauthenticated endpoint.
 array uses `{ name, status, available, capabilities, reason, reset_at, agents }`, where
 `status` is `available`, `unavailable`, or `quota_limited`; `reset_at` is an ISO
 timestamp when the CLI error includes a parseable retry duration, otherwise null.
-`qualified_providers` remains a compatibility list of currently available
-providers. An optional provider without an installed runner is explicitly
-`unavailable`; `agents` lists roster members assigned to that provider. It does
-not make the workspace core readiness fail. Adapter probes confirm that the CLI
-runner is on PATH; they do not make an authenticated or billable provider request.
+`available_providers` lists detected, usable runners. `qualified_providers`
+remains an empty compatibility field until authenticated capability checks exist;
+binary detection alone is not qualification. Gemini is explicitly `unavailable`
+even when installed: the required roster-only delegation guard has not been
+verified in the official CLI contract. `agents` lists roster members assigned
+to each provider, and an unavailable assignment makes readiness `blocked`.
+Adapter probes do not make an authenticated or billable provider request.
+
+Command requests require JSON and same-origin browser requests; no wildcard CORS
+is served. Takeover release returns a conflict while a human chat turn is active,
+so autonomous work cannot resume before that turn finishes.
 
 Return validation errors (400/422), unauthorized (401), forbidden action (403), missing
 entity (404), stale revision/idempotency conflict (409), overload (429), or unavailable

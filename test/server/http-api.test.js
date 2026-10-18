@@ -84,11 +84,26 @@ test('SupervisorServer serves TRD §12 API routes and SSE stream', async (t) => 
     assert.equal(data.agents.length, 13);
   });
 
+  await t.test('command API rejects cross-origin and non-JSON browser requests', async () => {
+    const body = JSON.stringify({ command_type: 'session.takeover', payload: { agent_id: 'Dev-1' } });
+    const crossOrigin = await fetch(`${baseUrl}/api/v1/commands`, {
+      method: 'POST', headers: { Origin: 'https://attacker.example', 'Content-Type': 'application/json' }, body
+    });
+    assert.equal(crossOrigin.status, 403);
+    assert.equal(crossOrigin.headers.get('access-control-allow-origin'), null);
+    const plainText = await fetch(`${baseUrl}/api/v1/commands`, {
+      method: 'POST', headers: { 'Content-Type': 'text/plain' }, body
+    });
+    assert.equal(plainText.status, 415);
+    assert.equal(takeover.getState('Dev-1'), 'auto');
+  });
+
   await t.test('GET /api/v1/readiness reports qualified provider status', async () => {
     const res = await fetch(`${baseUrl}/api/v1/readiness`);
     assert.equal(res.status, 200);
     const data = await res.json();
-    assert.equal(data.status, 'ready');
+    assert.equal(data.status, 'blocked');
+    assert.deepEqual(data.qualified_providers, []);
     assert.ok(Array.isArray(data.providers));
     assert.deepEqual(data.providers.map(provider => provider.name).sort(), ['agy', 'codex', 'gemini']);
     assert.ok(data.providers.every(provider => ['available', 'unavailable', 'quota_limited'].includes(provider.status)));
@@ -141,6 +156,29 @@ test('SupervisorServer serves TRD §12 API routes and SSE stream', async (t) => 
       body: JSON.stringify({ command_type: 'session.exec', payload: { agent_id: 'dev-1', command: 'hello', mode: 'chat', takeover_token: token } })
     });
     assert.equal(validChatRes.status, 200, 'human chat is allowed during an agent hold');
+
+    let finishChat;
+    let markStarted;
+    const started = new Promise((resolve) => { markStarted = resolve; });
+    const previousGenerate = server.chatService.generateResponse;
+    server.chatService.generateResponse = async () => {
+      markStarted();
+      return new Promise((resolve) => { finishChat = resolve; });
+    };
+    const pendingChat = fetch(`${baseUrl}/api/v1/commands`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command_type: 'session.exec', payload: { agent_id: 'dev-1', command: 'long answer', mode: 'chat', takeover_token: token } })
+    });
+    await started;
+    const prematureRelease = await fetch(`${baseUrl}/api/v1/commands`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command_type: 'session.release', payload: { agent_id: 'dev-1', takeover_token: token } })
+    });
+    assert.equal(prematureRelease.status, 409);
+    assert.equal(takeover.getState('Dev-1'), 'human_owned');
+    finishChat('done');
+    assert.equal((await pendingChat).status, 200);
+    server.chatService.generateResponse = previousGenerate;
 
     // 2. Release Takeover
     const releaseRes = await fetch(`${baseUrl}/api/v1/commands`, {

@@ -181,28 +181,25 @@ test('ChatService records quota reset hints from provider errors', async () => {
   assert.ok(Date.parse(agy.reset_at) > Date.now());
 });
 
-test('ChatService runs Gemini-backed agents through the Gemini adapter', async () => {
+test('ChatService labels fallback for agents assigned an unqualified Gemini provider', async () => {
   let invoked = false;
-  const gemini = {
-    command: 'gemini',
-    buildSpawnArgs: () => ['-p', '--output-format', 'stream-json'],
-    parseStreamEvent: (line) => JSON.parse(line),
-  };
+  const gemini = { command: 'gemini', buildSpawnArgs: () => { invoked = true; return []; } };
+  const agy = new AgyAdapter();
   const service = new ChatService({
     liveProviders: true,
-    adapters: { gemini },
-    which: (bin) => bin === 'gemini',
+    adapters: { gemini, agy },
+    which: (bin) => bin === 'gemini' || bin === 'agy',
     ptyManager: {
       async execute() { return { stdout: '', code: 0 }; },
       async executeCommand(binary, args) {
-        invoked = binary === 'gemini' && args.includes('--output-format');
-        return { stdout: '{"type":"message","role":"assistant","content":"Gemini response"}', stderr: '', code: 0 };
+        assert.equal(binary, 'agy');
+        return { stdout: '{"response":"Fallback response"}', stderr: '', code: 0 };
       },
     },
   });
   const response = await service.generateResponse('QA-1', 'Review this change');
-  assert.equal(invoked, true);
-  assert.match(response, /\[provider: gemini\].*Gemini response/);
+  assert.equal(invoked, false);
+  assert.match(response, /\[provider: agy\].*Fallback response/);
 });
 
 test('ChatService includes review context in provider prompt and throws when all providers fail', async () => {
